@@ -15,7 +15,19 @@ from sqlalchemy.pool import StaticPool
 from app.auth import hash_senha
 from app.db import get_sessao
 from app.main import criar_app
-from app.models import Base, Campanha, Lead, Usuario
+from app.models import (
+    Base,
+    Campanha,
+    Conexao,
+    Lead,
+    Mensagem,
+    StatusCampanha,
+    StatusConexao,
+    StatusEntrega,
+    StatusLead,
+    Usuario,
+)
+from datetime import datetime, timedelta, timezone
 
 
 @pytest.fixture
@@ -43,11 +55,31 @@ def fabrica(engine_teste):
     return sessionmaker(bind=engine_teste, expire_on_commit=False)
 
 
+class _GerenciadorFake:
+    def __init__(self) -> None:
+        self.iniciadas: list[int] = []
+
+    def iniciar(self, campanha_id: int) -> bool:
+        self.iniciadas.append(campanha_id)
+        return True
+
+    def esta_rodando(self, campanha_id: int) -> bool:
+        return campanha_id in self.iniciadas
+
+
 @pytest.fixture
-def client(fabrica) -> Iterator[TestClient]:
-    app = criar_app(fabrica_evolution=lambda: (_ for _ in ()).throw(
-        RuntimeError("evolution nao deveria ser chamada neste teste")
-    ))
+def gerenciador() -> _GerenciadorFake:
+    return _GerenciadorFake()
+
+
+@pytest.fixture
+def client(fabrica, gerenciador) -> Iterator[TestClient]:
+    app = criar_app(
+        fabrica_evolution=lambda: (_ for _ in ()).throw(
+            RuntimeError("evolution nao deveria ser chamada neste teste")
+        ),
+        gerenciador_disparo=gerenciador,  # type: ignore[arg-type]
+    )
 
     def _sessao() -> Iterator[Session]:
         with fabrica() as s:
@@ -59,6 +91,7 @@ def client(fabrica) -> Iterator[TestClient]:
 
     app.dependency_overrides[get_sessao] = _sessao
     with TestClient(app) as c:
+        c.gerenciador = gerenciador  # type: ignore[attr-defined]
         yield c
     app.dependency_overrides.clear()
 
@@ -239,3 +272,136 @@ class TestCampanha:
         r = client.get("/campanhas/nova", follow_redirects=False)
         assert r.status_code == 303
         assert r.headers["location"] == "/login"
+
+    def test_iniciar_e_pausar_campanha(self, client: TestClient, fabrica, gerenciador):
+        self._login(client, fabrica)
+        with fabrica() as s:
+            u = s.scalar(select(Usuario))
+            assert u is not None
+            conexao = Conexao(
+                usuario_id=u.id,
+                nome_instancia="dono-1",
+                status=StatusConexao.CONECTADA,
+                numero="5551999999999",
+                conectada_em=datetime.now(timezone.utc) - timedelta(days=5),
+            )
+            s.add(conexao)
+            s.flush()
+            campanha = Campanha(
+                usuario_id=u.id,
+                conexao_id=conexao.id,
+                nome="Teste",
+                modelos=["Oi {nome}!"],
+                status=StatusCampanha.RASCUNHO,
+            )
+            s.add(campanha)
+            s.flush()
+            s.add(
+                Lead(
+                    campanha_id=campanha.id,
+                    nome="Bicho Mania",
+                    telefone="5551998984086",
+                )
+            )
+            s.commit()
+            cid = campanha.id
+
+        r = client.get(f"/campanhas/{cid}")
+        csrf = _csrf(r.text)
+        r = client.post(
+            f"/campanhas/{cid}/iniciar",
+            data={"csrf": csrf},
+            follow_redirects=False,
+        )
+        assert r.status_code == 303
+        assert cid in gerenciador.iniciadas
+
+        with fabrica() as s:
+            c = s.get(Campanha, cid)
+            assert c is not None
+            assert c.status is StatusCampanha.RODANDO
+
+        r = client.get(f"/campanhas/{cid}")
+        csrf = _csrf(r.text)
+        r = client.post(
+            f"/campanhas/{cid}/pausar",
+            data={"csrf": csrf},
+            follow_redirects=False,
+        )
+        assert r.status_code == 303
+        with fabrica() as s:
+            c = s.get(Campanha, cid)
+            assert c is not None
+            assert c.status is StatusCampanha.PAUSADA
+
+        r = client.get(f"/campanhas/{cid}/progresso")
+        assert r.status_code == 200
+        assert r.json()["status"] == "pausada"
+        assert r.json()["pendentes"] == 1
+
+
+class TestWebhook:
+    def test_resposta_marca_lead_e_optout(self, client: TestClient, fabrica):
+        with fabrica() as s:
+            u = Usuario(
+                email="w@exemplo.com",
+                senha_hash=hash_senha("senha-forte"),
+                nome="W",
+            )
+            s.add(u)
+            s.flush()
+            conexao = Conexao(
+                usuario_id=u.id,
+                nome_instancia="inst-w",
+                status=StatusConexao.CONECTADA,
+            )
+            s.add(conexao)
+            s.flush()
+            campanha = Campanha(
+                usuario_id=u.id,
+                conexao_id=conexao.id,
+                nome="C",
+                modelos=["oi"],
+            )
+            s.add(campanha)
+            s.flush()
+            lead = Lead(
+                campanha_id=campanha.id,
+                nome="Bicho Mania",
+                telefone="5551998984086",
+                status=StatusLead.ENVIADO,
+            )
+            s.add(lead)
+            s.flush()
+            s.add(
+                Mensagem(
+                    lead_id=lead.id,
+                    campanha_id=campanha.id,
+                    texto="oi",
+                    status_entrega=StatusEntrega.ENVIADA,
+                    id_externo="MSG99",
+                )
+            )
+            s.commit()
+            lead_id = lead.id
+
+        payload = {
+            "event": "messages.upsert",
+            "instance": "inst-w",
+            "data": {
+                "key": {
+                    "remoteJid": "5551998984086@s.whatsapp.net",
+                    "fromMe": False,
+                    "id": "R1",
+                },
+                "message": {"conversation": "para de mandar por favor"},
+            },
+        }
+        r = client.post("/webhook/evolution", json=payload)
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+
+        with fabrica() as s:
+            lead = s.get(Lead, lead_id)
+            assert lead is not None
+            assert lead.status is StatusLead.OPTOUT

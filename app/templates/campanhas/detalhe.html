@@ -105,12 +105,99 @@ Olá! Passando para conhecer a {nome}, de {categoria}...">{{ modelos_texto }}</t
   </form>
 </section>
 
-<section class="card">
+<section class="card" id="painel-disparo">
   <h2>Disparo</h2>
-  <p class="muted">
-    O motor de disparo ainda está em construção. Quando existir, o botão de iniciar
-    campanha entra aqui — e só libera se houver conexão ativa, modelos válidos e
-    leads pendentes.
+
+  {% if campanha.conexao_id is none %}
+  <p class="muted">Vincule um WhatsApp conectado antes de disparar.</p>
+  <form method="post" action="/campanhas/{{ campanha.id }}/conexao">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Conexão
+      <select name="conexao_id" required>
+        <option value="">— escolher —</option>
+        {% for c in conexoes %}
+        <option value="{{ c.id }}">{{ c.numero or c.nome_instancia }} ({{ c.status.value }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="btn btn-primary" type="submit">Vincular</button>
+  </form>
+  {% endif %}
+
+  <div class="stats" id="stats-progresso"
+       data-status="{{ progresso.status }}"
+       data-url="/campanhas/{{ campanha.id }}/progresso">
+    <div class="stat"><b id="st-enviados">{{ progresso.enviados }}</b><span>enviados</span></div>
+    <div class="stat"><b id="st-pendentes">{{ progresso.pendentes }}</b><span>pendentes</span></div>
+    <div class="stat"><b id="st-respondeu">{{ progresso.respondeu }}</b><span>responderam</span></div>
+    <div class="stat"><b id="st-semwa">{{ progresso.sem_whatsapp }}</b><span>sem WhatsApp</span></div>
+    <div class="stat"><b id="st-falhou">{{ progresso.falhou }}</b><span>falhou</span></div>
+    <div class="stat"><b id="st-optout">{{ progresso.optout }}</b><span>opt-out</span></div>
+  </div>
+
+  <p class="muted small">
+    Status:
+    <span class="badge {{ campanha.status.value }}" id="st-badge">{{ campanha.status.value }}</span>
+    {% if worker_ativo %}<span class="muted"> · worker ativo</span>{% endif %}
+  </p>
+  <p class="small" id="st-motivo" style="color:var(--danger)">{% if campanha.motivo_pausa %}{{ campanha.motivo_pausa }}{% endif %}</p>
+
+  <div class="btn-row">
+    {% if campanha.status.value == 'rodando' %}
+    <form method="post" action="/campanhas/{{ campanha.id }}/pausar">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn btn-danger" type="submit">Pausar</button>
+    </form>
+    {% else %}
+    <form method="post" action="/campanhas/{{ campanha.id }}/iniciar">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn btn-primary" type="submit" {% if not pode_iniciar %}disabled title="{{ motivo_inicio }}"{% endif %}>
+        {% if campanha.status.value == 'pausada' %}Retomar{% else %}Iniciar disparo{% endif %}
+      </button>
+    </form>
+    {% endif %}
+    <a class="btn" href="/campanhas/{{ campanha.id }}/leads">Ver leads</a>
+  </div>
+  {% if motivo_inicio and campanha.status.value != 'rodando' %}
+  <p class="muted small" style="margin-top:10px">{{ motivo_inicio }}</p>
+  {% endif %}
+  <p class="muted small" style="margin-top:12px">
+    Retomar nunca reenvia o que já saiu: só entram leads ainda <span class="mono">pendente</span>.
+    Timeout de envio grava falha e segue — não tenta de novo o mesmo lead.
   </p>
 </section>
+
+<script>
+(() => {
+  const box = document.getElementById('stats-progresso');
+  if (!box) return;
+  const url = box.dataset.url;
+  const tick = async () => {
+    try {
+      const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!r.ok) return;
+      const d = await r.json();
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      set('st-enviados', d.enviados);
+      set('st-pendentes', d.pendentes);
+      set('st-respondeu', d.respondeu);
+      set('st-semwa', d.sem_whatsapp);
+      set('st-falhou', d.falhou);
+      set('st-optout', d.optout);
+      const badge = document.getElementById('st-badge');
+      if (badge) {
+        badge.textContent = d.status;
+        badge.className = 'badge ' + d.status;
+      }
+      const motivo = document.getElementById('st-motivo');
+      if (motivo) motivo.textContent = d.motivo_pausa || '';
+      box.dataset.status = d.status;
+      // Para de poliar quando a campanha nao esta mais rodando.
+      if (d.status !== 'rodando') return;
+    } catch (e) { /* rede local: tenta de novo */ }
+    setTimeout(tick, 3000);
+  };
+  if (box.dataset.status === 'rodando') setTimeout(tick, 2000);
+})();
+</script>
 {% endblock %}

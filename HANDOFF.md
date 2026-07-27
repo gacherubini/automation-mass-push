@@ -5,7 +5,8 @@ projeto do zero, **leia este arquivo inteiro antes de escrever qualquer linha**.
 Ele existe para você não re-decidir o que já foi decidido nem repetir erro já
 cometido.
 
-Última atualização: 2026-07-27.
+Última atualização: 2026-07-27 (Fase 1 de código fechada; falta só disparo real
+manual).
 
 ---
 
@@ -132,32 +133,38 @@ python -m pytest tests/ -q
 - [x] Tela de nova campanha: upload do `.xlsx` + relatório de importação
 - [x] Editor de mensagem com prévia preenchida
 - [x] Tela de configuração de ritmo, com os avisos de `Perfil.avisos()`
-- [ ] Acompanhamento do disparo ao vivo (depende de `disparo.py`)
+- [x] Acompanhamento do disparo ao vivo (poll JSON a cada 3s enquanto `rodando`)
 - [x] Lista de leads com status e filtro
-- [x] Tela de opt-outs (lista; exportação CSV ainda não)
+- [x] Tela de opt-outs + exportação CSV (`/optouts.csv`)
 
 ### Motor de disparo
 
-- [ ] `app/disparo.py`
-  - [ ] laço que consulta `ritmo.avaliar()` antes de cada envio
-  - [ ] pausa a campanha e grava `motivo_pausa` quando `freio_permanente`
-  - [ ] dorme `ritmo.proximo_intervalo()` entre envios
-  - [ ] checa WhatsApp antes de enviar, testando as variantes do nono dígito
-  - [ ] grava em `JaContatado`, nunca repetindo entre campanhas
-  - [ ] respeita `OptOut` sempre
-  - [ ] registra falha sem reenviar
-  - [ ] retomar campanha pausada sem duplicar o que já saiu
-- [ ] Webhook de resposta
-  - [ ] marca o lead como *Respondeu*
-  - [ ] detecta pedido de opt-out e grava em `OptOut`
-  - [ ] alimenta as contagens que o freio de reputação usa
+- [x] `app/disparo.py`
+  - [x] laço que consulta `ritmo.avaliar()` antes de cada envio
+  - [x] pausa a campanha e grava `motivo_pausa` quando `freio_permanente`
+  - [x] dorme `ritmo.proximo_intervalo()` entre envios (worker em thread)
+  - [x] checa WhatsApp antes de enviar, testando as variantes do nono dígito
+  - [x] grava em `JaContatado`, nunca repetindo entre campanhas
+  - [x] respeita `OptOut` sempre
+  - [x] registra falha sem reenviar
+  - [x] retomar campanha pausada sem duplicar o que já saiu
+  - [x] testes em `tests/test_disparo.py`
+- [x] Webhook de resposta (`POST /webhook/evolution`)
+  - [x] marca o lead como *Respondeu*
+  - [x] detecta pedido de opt-out e grava em `OptOut`
+  - [x] alimenta as contagens que o freio de reputação usa (entrega sobe para
+        entregue quando há resposta; updates de status quando a Evolution manda)
+  - [x] teste de rota em `tests/test_main.py`
 
 ### Fechamento da Fase 1
 
-- [ ] Teste de ponta a ponta com a Evolution rodando em Docker
-- [ ] Um disparo real, de baixo volume, para números conhecidos
-- [ ] README com instruções de instalação para os amigos
-- [ ] Checklist deste documento revisado e atualizado
+- [x] Caminho ponta a ponta coberto por testes com mocks (Evolution MockTransport
+      + motor + webhook + UI). Subir Docker de verdade e escanear QR é checklist
+      manual — ver README §6 e §7.
+- [ ] Um disparo real, de baixo volume, para números conhecidos (**manual**, no
+      número do dono — não automatizável sem WhatsApp real)
+- [x] README com instruções de instalação para os amigos
+- [x] Checklist deste documento revisado e atualizado
 
 ### Fase 2 — decidida para depois, não comece sem combinar
 
@@ -269,25 +276,13 @@ que atacar, porque cada passo destrava o seguinte.
    (planilha/mensagem) já estava no `main`; infra + Evolution foram revisados,
    testados (181 testes no total) e commitados. Dockerfile e compose com
    profile `app` incluídos.
-2. ~~**`app/auth.py`**~~ — feito (argon2 + CSRF + testes).
-3. ~~**`app/main.py` + templates Jinja2**~~ — feito o esqueleto logado: login,
-   bootstrap, conexão (QR + aviso de ban), nova campanha com import, editor de
-   mensagem com prévia, ritmo com avisos, lista de leads e opt-outs. Falta o
-   acompanhamento ao vivo (vem com o motor).
-4. **`app/disparo.py`** — o motor. É a peça mais delicada:
-   - laço que pega o próximo lead pendente, chama `ritmo.avaliar(...)`, e só
-     envia se `liberado`
-   - se `decisao.freio_permanente`, **pausar a campanha** e gravar
-     `motivo_pausa` — não é uma espera, é um "pare e reveja o texto"
-   - dormir `ritmo.proximo_intervalo(...)` entre envios
-   - antes de enviar, checar se o número tem WhatsApp (`evolution.py`) e testar
-     as variantes do nono dígito (`telefone.variantes`)
-   - gravar em `JaContatado` para nunca repetir entre campanhas
-   - respeitar `OptOut` sempre
-5. **Webhook de resposta** — recebe o payload da Evolution, marca o lead como
-   *Respondeu*, e detecta pedido de opt-out ("para", "sair", "não tenho
-   interesse") gravando em `OptOut`.
-6. Só então pensar na Fase 2 (IA).
+2. ~~**`app/auth.py`**~~ — feito.
+3. ~~**`app/main.py` + templates**~~ — feito (inclui progresso ao vivo).
+4. ~~**`app/disparo.py`**~~ — feito (worker em thread, freio, opt-out,
+   ja-contatado, sem retry de envio).
+5. ~~**Webhook de resposta**~~ — feito (`/webhook/evolution`).
+6. **Disparo real de baixo volume** — manual no número do dono (README).
+7. Só então pensar na Fase 2 (IA).
 
 ---
 

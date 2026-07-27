@@ -1,12 +1,12 @@
-"""Dashboard FastAPI: login, conexao WhatsApp, campanhas e leads.
+"""Dashboard FastAPI: login, conexao WhatsApp, campanhas, disparo e webhook.
 
-O motor de disparo (`disparo.py`) ainda nao existe — daqui so se configura e
-acompanha. A tela de conexao ja fala com a Evolution de verdade; se ela nao
-estiver no ar, a pagina mostra o erro em portugues em vez de estourar 500.
+A tela de conexao e o motor falam com a Evolution de verdade; se ela nao
+estiver no ar, o erro aparece em portugues em vez de estourar 500.
 """
 
 from __future__ import annotations
 
+import csv
 import io
 import logging
 import re
@@ -16,13 +16,14 @@ from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
+from app import disparo as mod_disparo
 from app import mensagem as mod_mensagem
 from app import planilha as mod_planilha
 from app.auth import (
@@ -36,12 +37,14 @@ from app.auth import (
     usuario_atual,
 )
 from app.config import configuracao
-from app.db import get_sessao
+from app.db import fabrica_de_sessao, get_sessao
+from app.disparo import GerenciadorDisparo
 from app.evolution import (
     CONECTADA,
     Evolution,
     ErroEvolution,
     JaConectado,
+    interpretar_webhook,
 )
 from app.models import (
     Campanha,
@@ -50,6 +53,7 @@ from app.models import (
     OptOut,
     StatusCampanha,
     StatusConexao,
+    StatusEntrega,
     StatusLead,
     Usuario,
 )
@@ -65,8 +69,9 @@ _RE_INSTANCIA = re.compile(r"[^a-zA-Z0-9_-]+")
 def criar_app(
     *,
     fabrica_evolution: Callable[[], Evolution] | None = None,
+    gerenciador_disparo: GerenciadorDisparo | None = None,
 ) -> FastAPI:
-    """Monta a aplicacao. `fabrica_evolution` existe para o teste injetar mock."""
+    """Monta a aplicacao. Fabricas injetaveis existem para o teste."""
     cfg = configuracao()
     app = FastAPI(title="Prospeccao WhatsApp", docs_url=None, redoc_url=None)
 
@@ -92,6 +97,13 @@ def criar_app(
         return Evolution(atual.evolution_url, atual.evolution_api_key)
 
     app.state.fabrica_evolution = _evolution  # type: ignore[attr-defined]
+
+    if gerenciador_disparo is None:
+        gerenciador_disparo = GerenciadorDisparo(
+            fabrica_sessao=lambda: fabrica_de_sessao()(),
+            fabrica_evolution=_evolution,
+        )
+    app.state.disparo = gerenciador_disparo  # type: ignore[attr-defined]
 
     # -- helpers de request -------------------------------------------------
 
@@ -549,6 +561,17 @@ def criar_app(
                 aviso_modelo = str(erro)
 
         avisos_ritmo = campanha.perfil().avisos()
+        prog = mod_disparo.progresso(sessao, campanha)
+        pode, motivo_inicio = mod_disparo.pode_iniciar(sessao, campanha)
+        # Se ja esta rodando, a tela mostra pausar — nao o botao iniciar.
+        if campanha.status == StatusCampanha.RODANDO:
+            pode, motivo_inicio = False, ""
+        conexoes = sessao.scalars(
+            select(Conexao)
+            .where(Conexao.usuario_id == usuario.id)
+            .order_by(Conexao.id.desc())
+        ).all()
+        worker_ativo = app.state.disparo.esta_rodando(campanha.id)  # type: ignore[attr-defined]
 
         return templates.TemplateResponse(
             request,
@@ -564,6 +587,11 @@ def criar_app(
                 aviso_modelo=aviso_modelo,
                 aviso_diversidade=aviso_diversidade,
                 avisos_ritmo=avisos_ritmo,
+                progresso=prog,
+                pode_iniciar=pode,
+                motivo_inicio=motivo_inicio,
+                conexoes=conexoes,
+                worker_ativo=worker_ativo,
             ),
         )
 
@@ -654,6 +682,107 @@ def criar_app(
             _flash(request, "ok", "Ritmo atualizado.")
         return RedirectResponse(volta, status_code=303)
 
+    @app.post("/campanhas/{campanha_id}/conexao")
+    def campanha_vincular_conexao(
+        campanha_id: int,
+        request: Request,
+        conexao_id: Annotated[str, Form()] = "",
+        csrf: Annotated[str, Form()] = "",
+        sessao: Session = Depends(get_sessao),
+        usuario: Usuario = Depends(_exigir_usuario),
+    ) -> Response:
+        volta = f"/campanhas/{campanha_id}"
+        bloqueio = _csrf_ou_volta(request, csrf, volta)
+        if bloqueio:
+            return bloqueio
+        campanha = _campanha_do_usuario(sessao, usuario, campanha_id)
+        if campanha is None:
+            return RedirectResponse("/app", status_code=303)
+        if not conexao_id.strip().isdigit():
+            _flash(request, "erro", "Escolha uma conexao.")
+            return RedirectResponse(volta, status_code=303)
+        cid = int(conexao_id)
+        conexao = sessao.scalar(
+            select(Conexao).where(
+                Conexao.id == cid, Conexao.usuario_id == usuario.id
+            )
+        )
+        if conexao is None:
+            _flash(request, "erro", "Conexao nao encontrada.")
+            return RedirectResponse(volta, status_code=303)
+        campanha.conexao_id = conexao.id
+        sessao.commit()
+        _flash(request, "ok", "Conexao vinculada a campanha.")
+        return RedirectResponse(volta, status_code=303)
+
+    @app.post("/campanhas/{campanha_id}/iniciar")
+    def campanha_iniciar(
+        campanha_id: int,
+        request: Request,
+        csrf: Annotated[str, Form()] = "",
+        sessao: Session = Depends(get_sessao),
+        usuario: Usuario = Depends(_exigir_usuario),
+    ) -> Response:
+        volta = f"/campanhas/{campanha_id}"
+        bloqueio = _csrf_ou_volta(request, csrf, volta)
+        if bloqueio:
+            return bloqueio
+        campanha = _campanha_do_usuario(sessao, usuario, campanha_id)
+        if campanha is None:
+            return RedirectResponse("/app", status_code=303)
+
+        ok, motivo = mod_disparo.pode_iniciar(sessao, campanha)
+        if not ok:
+            _flash(request, "erro", motivo)
+            return RedirectResponse(volta, status_code=303)
+
+        campanha.status = StatusCampanha.RODANDO
+        campanha.motivo_pausa = None
+        sessao.commit()
+        app.state.disparo.iniciar(campanha.id)  # type: ignore[attr-defined]
+        _flash(
+            request,
+            "ok",
+            "Disparo iniciado. As mensagens saem no ritmo configurado — "
+            "acompanhe o progresso abaixo.",
+        )
+        return RedirectResponse(volta, status_code=303)
+
+    @app.post("/campanhas/{campanha_id}/pausar")
+    def campanha_pausar(
+        campanha_id: int,
+        request: Request,
+        csrf: Annotated[str, Form()] = "",
+        sessao: Session = Depends(get_sessao),
+        usuario: Usuario = Depends(_exigir_usuario),
+    ) -> Response:
+        volta = f"/campanhas/{campanha_id}"
+        bloqueio = _csrf_ou_volta(request, csrf, volta)
+        if bloqueio:
+            return bloqueio
+        campanha = _campanha_do_usuario(sessao, usuario, campanha_id)
+        if campanha is None:
+            return RedirectResponse("/app", status_code=303)
+        if campanha.status == StatusCampanha.RODANDO:
+            campanha.status = StatusCampanha.PAUSADA
+            campanha.motivo_pausa = "Pausada manualmente."
+            sessao.commit()
+            _flash(request, "ok", "Campanha pausada. Pode retomar sem reenviar o que ja saiu.")
+        return RedirectResponse(volta, status_code=303)
+
+    @app.get("/campanhas/{campanha_id}/progresso")
+    def campanha_progresso(
+        campanha_id: int,
+        sessao: Session = Depends(get_sessao),
+        usuario: Usuario = Depends(_exigir_usuario),
+    ) -> Response:
+        campanha = _campanha_do_usuario(sessao, usuario, campanha_id)
+        if campanha is None:
+            return JSONResponse({"erro": "nao encontrada"}, status_code=404)
+        dados = mod_disparo.progresso(sessao, campanha)
+        dados["worker_ativo"] = app.state.disparo.esta_rodando(campanha.id)  # type: ignore[attr-defined]
+        return JSONResponse(dados)
+
     @app.get("/campanhas/{campanha_id}/leads", response_class=HTMLResponse)
     def campanha_leads(
         campanha_id: int,
@@ -705,6 +834,92 @@ def criar_app(
             "optouts.html",
             _ctx(request, usuario, optouts=lista),
         )
+
+    @app.get("/optouts.csv")
+    def optouts_csv(
+        sessao: Session = Depends(get_sessao),
+        usuario: Usuario = Depends(_exigir_usuario),
+    ) -> Response:
+        lista = sessao.scalars(
+            select(OptOut)
+            .where(OptOut.usuario_id == usuario.id)
+            .order_by(OptOut.id.desc())
+        ).all()
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["telefone", "motivo", "criado_em"])
+        for o in lista:
+            writer.writerow(
+                [
+                    o.telefone,
+                    o.motivo or "",
+                    o.criado_em.isoformat() if o.criado_em else "",
+                ]
+            )
+        buf.seek(0)
+        return StreamingResponse(
+            iter([buf.getvalue()]),
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": 'attachment; filename="optouts.csv"'
+            },
+        )
+
+    # -- webhook Evolution (sem sessao de usuario) --------------------------
+
+    @app.post("/webhook/evolution")
+    async def webhook_evolution(
+        request: Request,
+        sessao: Session = Depends(get_sessao),
+    ) -> Response:
+        """Recebe eventos da Evolution: resposta de lead e (se vier) entrega.
+
+        Sem autenticacao de cookie: a Evolution chama de dentro da rede Docker.
+        Em producao, exponha so na rede interna ou coloque um segredo na URL.
+        """
+        try:
+            payload = await request.json()
+        except Exception:
+            return JSONResponse({"ok": False, "erro": "json invalido"}, status_code=400)
+
+        if not isinstance(payload, dict):
+            return JSONResponse({"ok": True, "ignorado": True})
+
+        resposta = interpretar_webhook(payload)
+        if resposta is not None and resposta.e_resposta_de_lead:
+            mod_disparo.processar_resposta_recebida(
+                sessao,
+                nome_instancia=resposta.instancia,
+                numero=resposta.numero,
+                texto=resposta.texto,
+            )
+            return JSONResponse({"ok": True, "tipo": "resposta"})
+
+        # Atualizacao de entrega / bloqueio, quando o payload carrega key.id.
+        evento = str(payload.get("event") or "").lower().replace("_", ".").replace("-", ".")
+        if "messages.update" in evento or "send.message" in evento:
+            data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+            chave = data.get("key") if isinstance(data.get("key"), dict) else {}
+            id_ext = str(chave.get("id") or data.get("idMessage") or "")
+            status_bruto = str(
+                data.get("status") or data.get("messageStatus") or ""
+            ).lower()
+            mapa = {
+                "delivery_ack": StatusEntrega.ENTREGUE,
+                "delivered": StatusEntrega.ENTREGUE,
+                "read": StatusEntrega.LIDA,
+                "played": StatusEntrega.LIDA,
+                "server_ack": StatusEntrega.ENVIADA,
+                "error": StatusEntrega.FALHOU,
+                "blocked": StatusEntrega.BLOQUEADA,
+            }
+            if id_ext and status_bruto in mapa:
+                mod_disparo.atualizar_entrega_por_id_externo(
+                    sessao, id_ext, mapa[status_bruto]
+                )
+                return JSONResponse({"ok": True, "tipo": "entrega"})
+
+        return JSONResponse({"ok": True, "ignorado": True})
 
     # -- erros de auth via exception ----------------------------------------
 
