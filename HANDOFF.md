@@ -66,20 +66,24 @@ python -m pytest tests/ -q
   - [x] amostra mínima antes de acionar o freio
   - [x] avisos de configuração agressiva, sem bloquear o usuário
   - [x] invariantes do padrão travadas por teste (sob 30/h, sem rajada, cabe na janela)
-- [ ] `app/planilha.py` — import do `.xlsx` do scraper
-  - [ ] mapeia colunas pelo cabeçalho, tolerante a acento/caixa/ordem
-  - [ ] erro claro quando falta coluna essencial
-  - [ ] descarta fixo e inválido, contando cada motivo
-  - [ ] deduplica dentro da própria planilha
-  - [ ] relatório de importação para a tela
-  - [ ] aceita caminho e file-like (upload)
-- [ ] `app/mensagem.py` — modelo com lacunas
-  - [ ] lacunas `{nome}` `{categoria}` `{endereco}` `{busca}`
-  - [ ] múltiplas variações, sorteadas por lead
-  - [ ] validação do modelo antes do disparo, com erro claro
-  - [ ] tratamento de lacuna sem valor (nunca sai "None" nem chave crua)
-  - [ ] prévia preenchida com leads reais
-  - [ ] medida de diversidade, para avisar quando há variações de menos
+- [x] `app/planilha.py` — import do `.xlsx` do scraper
+  - [x] mapeia colunas pelo cabeçalho, tolerante a acento/caixa/ordem
+  - [x] erro claro quando falta coluna essencial
+  - [x] descarta fixo e inválido, contando cada motivo
+  - [x] deduplica dentro da própria planilha
+  - [x] relatório de importação para a tela
+  - [x] aceita caminho e file-like (upload)
+  - [x] invariante travada por teste: `total = sem_telefone + invalidos +
+        duplicados + fixos + prontos`. Toda linha cai em exatamente um balde,
+        senão o usuário não consegue explicar as lojas que sumiram entre o
+        arquivo e a fila
+- [x] `app/mensagem.py` — modelo com lacunas
+  - [x] lacunas `{nome}` `{categoria}` `{endereco}` `{busca}`
+  - [x] múltiplas variações, sorteadas por lead
+  - [x] validação do modelo antes do disparo, com erro claro
+  - [x] tratamento de lacuna sem valor (nunca sai "None" nem chave crua)
+  - [x] prévia preenchida com leads reais
+  - [x] medida de diversidade, para avisar quando há variações de menos
 
 ### Infraestrutura
 
@@ -295,6 +299,18 @@ que atacar, porque cada passo destrava o seguinte.
   status, obter QR).
 - **Freio de reputação com amostra pequena.** 1 bloqueio em 5 envios dá 20%, mas
   não significa nada. `ritmo.AMOSTRA_MINIMA_PARA_FREIO` existe por isso.
+- **Lacuna sem valor não pode virar buraco.** Loja sem categoria na planilha
+  geraria `"Vi a Bicho Mania, de , no Maps"` — espaço duplo e artigo solto
+  denunciam o molde na hora. `mensagem.SUBSTITUTOS` troca por um termo neutro
+  ("sua loja", "o seu segmento"). O texto sai mais genérico, mas inteiro.
+  Efeito colateral aceito: `"de {categoria}"` vira `"de o seu segmento"` em vez
+  de `"do seu segmento"`. Contrair exigiria analisar a preposição anterior; o
+  usuário vê o resultado na prévia antes de disparar.
+- **`{telefone}` e `{link}` não são lacunas válidas, de propósito.** Mostrar
+  para a loja que você já tem o número dela soa invasivo.
+- **Célula de telefone pode vir como número.** Telefone digitado sem máscara no
+  Excel volta como `float` e viraria `"51998581025.0"`. `planilha._texto()`
+  cuida disso, e há teste.
 - **Extensão Chrome do projeto irmão não recarrega sozinha.** Irrelevante aqui,
   mas se você for mexer no scraper: depois de alterar arquivos é preciso clicar
   em recarregar em `chrome://extensions` **e** dar F5 na página.
