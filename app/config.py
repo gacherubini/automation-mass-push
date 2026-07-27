@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from functools import lru_cache
+from pathlib import Path
 
 # Default de desenvolvimento. Bate com o docker-compose deste repositorio, para
 # `docker compose up` e `alembic upgrade head` funcionarem sem configurar nada.
@@ -25,6 +26,40 @@ URL_BANCO_PADRAO = "postgresql+psycopg://postgres:postgres@localhost:5432/mass_p
 
 SECRET_KEY_PADRAO = "dev-inseguro-troque-em-producao"
 CHAVE_EVOLUTION_PADRAO = "dev-inseguro-troque-em-producao"
+
+# Raiz do repositorio (app/config.py -> app/ -> raiz). O .env mora aqui.
+_RAIZ = Path(__file__).resolve().parent.parent
+
+
+def _carregar_dotenv() -> None:
+    """Le `.env` da raiz se existir, sem sobrescrever variavel ja exportada.
+
+    O Docker Compose carrega o arquivo sozinho para os containers; o processo
+    local (uvicorn, alembic, pytest avulso) nao. Sem isto, a app usa o default
+    `postgres:postgres` enquanto o container foi criado com a senha do .env.
+    """
+    caminho = _RAIZ / ".env"
+    if not caminho.is_file():
+        return
+    try:
+        texto = caminho.read_text(encoding="utf-8")
+    except OSError:
+        return
+    for linha in texto.splitlines():
+        linha = linha.strip()
+        if not linha or linha.startswith("#") or "=" not in linha:
+            continue
+        nome, _, valor = linha.partition("=")
+        nome = nome.strip()
+        if not nome or nome in os.environ:
+            continue
+        valor = valor.strip()
+        if len(valor) >= 2 and valor[0] == valor[-1] and valor[0] in "\"'":
+            valor = valor[1:-1]
+        os.environ[nome] = valor
+
+
+_carregar_dotenv()
 
 
 def _texto(nome: str, padrao: str) -> str:
