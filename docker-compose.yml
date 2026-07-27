@@ -1,0 +1,130 @@
+# Ambiente local: banco, Evolution API e a aplicacao.
+#
+# `docker compose up` sobe postgres + evolution-api, que e o suficiente para
+# rodar a aplicacao na mao (uvicorn no host) e ler o QR code. O servico `app`
+# esta atras de um profile porque depende de um Dockerfile que ainda nao existe
+# neste repositorio - sem o profile, ele nao atrapalha quem so quer o banco:
+#
+#   docker compose up -d                  # postgres + evolution
+#   docker compose --profile app up -d    # tudo, depois que o Dockerfile existir
+
+name: automation-mass-push
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-mass_push}
+    ports:
+      # Publicado no host para o `alembic upgrade head` rodar de fora do compose.
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - dados_postgres:/var/lib/postgresql/data
+    healthcheck:
+      # A Evolution quebra se subir antes do banco aceitar conexao, e o retry
+      # dela nao e paciente. O healthcheck e o que segura a ordem de verdade -
+      # `depends_on` sozinho so espera o container existir.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-mass_push}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  evolution-api:
+    image: atendai/evolution-api:v2.1.1
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${EVOLUTION_PORT:-8080}:8080"
+    environment:
+      SERVER_URL: ${EVOLUTION_URL_PUBLICA:-http://localhost:8080}
+      # Chave mestra da Evolution. Quem tem ela cria instancia, le QR e manda
+      # mensagem por QUALQUER numero conectado - trate como senha de producao.
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:?defina EVOLUTION_API_KEY no .env}
+
+      # A Evolution guarda o estado dela no mesmo Postgres, mas em outro schema.
+      # Um banco so evita subir um segundo servidor de banco; o schema separado
+      # evita as tabelas dela se misturarem com as do Alembic (e um `alembic
+      # downgrade` levar junto a sessao do WhatsApp).
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-mass_push}?schema=evolution
+      DATABASE_CONNECTION_CLIENT_NAME: evolution
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      # Precisamos do historico de mensagem para casar o webhook de entrega e de
+      # resposta com a nossa tabela `mensagem`.
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "true"
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      DATABASE_SAVE_DATA_CHATS: "true"
+      DATABASE_SAVE_DATA_LABELS: "false"
+      DATABASE_SAVE_DATA_HISTORIC: "false"
+
+      # Sem Redis: cache local basta no volume de uma instalacao pequena, e um
+      # servico a menos e um servico a menos para cair.
+      CACHE_REDIS_ENABLED: "false"
+      CACHE_LOCAL_ENABLED: "true"
+
+      # Nunca apagar a instancia sozinha. O default apaga instancia que fica um
+      # tempo sem conectar - e apagar instancia significa perder a sessao e ter
+      # que ler o QR de novo, o que reinicia o aquecimento na pratica.
+      DEL_INSTANCE: "false"
+
+      # Como o aparelho aparece na lista de dispositivos conectados do celular.
+      CONFIG_SESSION_PHONE_CLIENT: ${EVOLUTION_NOME_CLIENTE:-Prospeccao}
+      CONFIG_SESSION_PHONE_NAME: Chrome
+
+      QRCODE_LIMIT: "30"
+      QRCODE_COLOR: "#000000"
+
+      # Webhook global: e por aqui que a entrega, a resposta e o opt-out chegam
+      # de volta. Sem isso as taxas do freio de reputacao ficam sempre em zero.
+      WEBHOOK_GLOBAL_ENABLED: ${WEBHOOK_GLOBAL_ENABLED:-false}
+      WEBHOOK_GLOBAL_URL: ${WEBHOOK_GLOBAL_URL:-http://app:8000/webhook/evolution}
+      WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS: "false"
+
+      LOG_LEVEL: ${EVOLUTION_LOG_LEVEL:-ERROR,WARN,INFO}
+      LOG_COLOR: "true"
+    volumes:
+      # A sessao do WhatsApp mora aqui. Perder este volume = todo mundo lendo QR
+      # de novo, e numero reconectado do zero volta para o degrau mais baixo do
+      # aquecimento.
+      - instancias_evolution:/evolution/instances
+
+  app:
+    profiles: ["app"]
+    # O Dockerfile ainda nao existe neste repositorio - crie antes de usar o
+    # profile. Algo como: python:3.14-slim, pip install -r requirements.txt,
+    # uvicorn app.main:app --host 0.0.0.0 --port 8000.
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      evolution-api:
+        condition: service_started
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    environment:
+      # Dentro da rede do compose os servicos se acham pelo nome, e nao por
+      # localhost - por isso estas duas nao vem do .env como estao la.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-mass_push}
+      EVOLUTION_URL: http://evolution-api:8080
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:?defina EVOLUTION_API_KEY no .env}
+      SECRET_KEY: ${SECRET_KEY:?defina SECRET_KEY no .env}
+      AMBIENTE: ${AMBIENTE:-desenvolvimento}
+      DEBUG_SQL: ${DEBUG_SQL:-false}
+    volumes:
+      # Planilhas enviadas pelo usuario, fora da imagem para sobreviver a deploy.
+      - envios_app:/app/tmp
+
+volumes:
+  dados_postgres:
+  instancias_evolution:
+  envios_app:

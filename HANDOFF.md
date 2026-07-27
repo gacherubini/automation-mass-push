@@ -87,39 +87,44 @@ python -m pytest tests/ -q
 
 ### Infraestrutura
 
-- [ ] `app/config.py` — configuração por variável de ambiente, sem segredo no código
-- [ ] `app/db.py` — engine, sessionmaker, dependência FastAPI
-- [ ] `app/models.py` — as 7 entidades
-  - [ ] `Usuario`
-  - [ ] `Conexao` (instância WhatsApp; `conectada_em` alimenta o aquecimento)
-  - [ ] `Campanha` (guarda o Perfil de ritmo e os modelos de mensagem)
-  - [ ] `Lead`
-  - [ ] `Mensagem` (texto realmente enviado, id externo)
-  - [ ] `OptOut` (global por usuário, unique)
-  - [ ] `JaContatado` (global por usuário, unique)
-  - [ ] índices nas consultas quentes
-- [ ] `alembic/` + primeira migração
-- [ ] `docker-compose.yml` — app + Postgres + Evolution API, com volumes
-- [ ] `.env.example` documentado
-- [ ] `Dockerfile` do app
+- [x] `app/config.py` — configuração por variável de ambiente, sem segredo no código
+  - [x] defaults locais, string vazia = ausente, avisos em produção
+  - [x] testes em `tests/test_config.py`
+- [x] `app/db.py` — engine, sessionmaker, dependência FastAPI
+- [x] `app/models.py` — as 7 entidades
+  - [x] `Usuario`
+  - [x] `Conexao` (instância WhatsApp; `conectada_em` alimenta o aquecimento)
+  - [x] `Campanha` (guarda o Perfil de ritmo e os modelos de mensagem)
+  - [x] `Lead`
+  - [x] `Mensagem` (texto realmente enviado, id externo)
+  - [x] `OptOut` (global por usuário, unique)
+  - [x] `JaContatado` (global por usuário, unique; `campanha_id` SET NULL)
+  - [x] índices nas consultas quentes
+  - [x] testes em SQLite em `tests/test_models.py`
+- [x] `alembic/` + primeira migração (`329d0dfb5ad1`)
+- [x] `docker-compose.yml` — app (profile) + Postgres + Evolution API, com volumes
+- [x] `.env.example` documentado
+- [x] `Dockerfile` do app
 
 ### Integração com o WhatsApp
 
-- [ ] `app/evolution.py` — cliente HTTP
-  - [ ] criar instância
-  - [ ] obter QR code
-  - [ ] consultar estado da conexão e número conectado
-  - [ ] desconectar
-  - [ ] checar se número tem WhatsApp (em lote)
-  - [ ] enviar mensagem de texto
-  - [ ] interpretar payload de webhook, ignorando `fromMe`
-  - [ ] exceções próprias com mensagem útil em português
-  - [ ] retry só em operação segura — **nunca** em envio
-  - [ ] testes com `httpx.MockTransport`, sem rede
+- [x] `app/evolution.py` — cliente HTTP
+  - [x] criar instância
+  - [x] obter QR code
+  - [x] consultar estado da conexão e número conectado
+  - [x] desconectar
+  - [x] checar se número tem WhatsApp (em lote, partido em 50)
+  - [x] enviar mensagem de texto
+  - [x] interpretar payload de webhook, ignorando `fromMe`
+  - [x] exceções próprias com mensagem útil em português
+  - [x] retry só em operação segura — **nunca** em envio
+  - [x] testes com `httpx.MockTransport`, sem rede (`tests/test_evolution.py`)
 
 ### Dashboard
 
-- [ ] `app/auth.py` — argon2 + sessão assinada com `itsdangerous`
+- [x] `app/auth.py` — argon2 + sessão assinada com `itsdangerous`
+  - [x] hash/verify, login, sessao, CSRF
+  - [x] testes em `tests/test_auth.py`
 - [ ] `app/main.py` — rotas
 - [ ] Tela de login
 - [ ] Tela de conexão com QR code — **com o aviso de risco de ban do número**
@@ -259,12 +264,11 @@ português, explicando a motivação, não o diff.
 A lista granular está na [seção 2](#2-checklist). Aqui fica só a **ordem** em
 que atacar, porque cada passo destrava o seguinte.
 
-1. **Integrar o que os três agentes paralelos entregaram** (planilha, mensagem,
-   infra, evolution). Rodar a suíte inteira, resolver conflito de import,
-   commitar.
-2. **`app/auth.py`** — login com argon2, sessão assinada com `itsdangerous`. O
-   projeto `C:\Users\guilh\Documents\codigo\bot-whatsapp-financiamento\portal-gestao\app\auth.py`
-   já resolve isso com a mesma stack; use como referência.
+1. ~~**Integrar o que os três agentes paralelos entregaram**~~ — feito. Núcleo
+   (planilha/mensagem) já estava no `main`; infra + Evolution foram revisados,
+   testados (181 testes no total) e commitados. Dockerfile e compose com
+   profile `app` incluídos.
+2. ~~**`app/auth.py`**~~ — feito (argon2 + CSRF + testes).
 3. **`app/main.py` + templates Jinja2** — telas: login, conexão (QR), nova
    campanha (upload + relatório de import), editor de mensagem com prévia,
    acompanhamento do disparo, lista de leads.

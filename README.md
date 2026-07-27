@@ -7,9 +7,9 @@ acompanha quem respondeu.
 Cada usuário loga no dashboard e conecta o **próprio** WhatsApp lendo um QR
 code. As mensagens saem do número de quem escaneou.
 
-> **Status:** em construção. O núcleo de decisão (normalização de telefone e
-> política de ritmo) está pronto e testado. Dashboard, banco e integração com a
-> Evolution API ainda não.
+> **Status:** em construção. Núcleo de decisão, import de planilha, montagem de
+> mensagem, models/migração, docker-compose e cliente Evolution estão prontos e
+> testados. Falta o dashboard (rotas + templates), o motor de disparo e o webhook.
 
 ---
 
@@ -86,12 +86,34 @@ de se interessar, e sumir na primeira negativa.
 app/
   telefone.py   normalização BR -> E.164, classifica celular/fixo/inválido
   ritmo.py      política de ritmo: aquecimento, tetos, janela, freio
+  planilha.py   import do .xlsx do scraper do Maps
+  mensagem.py   modelo com lacunas e prévia
+  config.py     variáveis de ambiente
+  db.py         engine e sessão SQLAlchemy
+  models.py     as 7 entidades
+  evolution.py  cliente HTTP da Evolution API v2
+  auth.py       argon2 + sessão/CSRF
+docker-compose.yml   postgres + evolution (+ app com --profile app)
+alembic/             migração inicial
 tests/
 ```
 
-`telefone.py` e `ritmo.py` são funções puras — sem banco, sem rede, sem relógio
-global. A hora entra como parâmetro justamente para o freio e a janela serem
-testáveis.
+`telefone.py`, `ritmo.py`, `planilha.py` e `mensagem.py` são funções puras —
+sem banco, sem rede, sem relógio global. A hora entra como parâmetro justamente
+para o freio e a janela serem testáveis.
+
+## Subir o ambiente local
+
+```bash
+cp .env.example .env
+# preencha SECRET_KEY e EVOLUTION_API_KEY (o compose recusa subir sem elas)
+
+docker compose up -d          # postgres + evolution-api
+alembic upgrade head          # cria as tabelas no Postgres publicado em :5432
+```
+
+A aplicação web (`app/main.py`) ainda não está no ar; o serviço `app` do compose
+fica atrás do profile `app` até as rotas existirem.
 
 ## Testes
 
