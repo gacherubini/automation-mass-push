@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Nova campanha — Prospecção{% endblock %}
+{% block content %}
+<h1>Nova campanha</h1>
+<p class="lead">
+  Envie o <span class="mono">.xlsx</span> gerado pelo scraper do Google Maps.
+  O sistema descarta fixo, inválido e duplicado e mostra o relatório antes de qualquer disparo.
+</p>
+
+<section class="card">
+  <form method="post" action="/campanhas/nova" enctype="multipart/form-data">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Nome da campanha
+      <input type="text" name="nome" placeholder="Pets Canoas — março" required>
+    </label>
+    <label>Conexão (opcional)
+      <select name="conexao_id">
+        <option value="">— escolher depois —</option>
+        {% for c in conexoes %}
+        <option value="{{ c.id }}">{{ c.numero or c.nome_instancia }} ({{ c.status.value }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Planilha .xlsx
+      <input type="file" name="arquivo" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+    </label>
+    <div class="btn-row">
+      <button class="btn btn-primary" type="submit">Importar</button>
+      <a class="btn" href="/app">Cancelar</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

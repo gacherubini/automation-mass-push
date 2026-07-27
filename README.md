@@ -7,9 +7,10 @@ acompanha quem respondeu.
 Cada usuário loga no dashboard e conecta o **próprio** WhatsApp lendo um QR
 code. As mensagens saem do número de quem escaneou.
 
-> **Status:** em construção. Núcleo de decisão, import de planilha, montagem de
-> mensagem, models/migração, docker-compose e cliente Evolution estão prontos e
-> testados. Falta o dashboard (rotas + templates), o motor de disparo e o webhook.
+> **Status:** em construção. Núcleo, planilha, mensagem, models, Evolution,
+> auth e dashboard (login, QR, campanha, prévia, ritmo, leads) estão prontos e
+> testados. Falta o motor de disparo, o webhook de resposta e o acompanhamento
+> ao vivo.
 
 ---
 
@@ -112,8 +113,13 @@ docker compose up -d          # postgres + evolution-api
 alembic upgrade head          # cria as tabelas no Postgres publicado em :5432
 ```
 
-A aplicação web (`app/main.py`) ainda não está no ar; o serviço `app` do compose
-fica atrás do profile `app` até as rotas existirem.
+```bash
+# com o Postgres no ar e a migração aplicada:
+uvicorn app.main:app --reload --port 8000
+# abra http://localhost:8000 — na primeira vez use /bootstrap
+```
+
+O serviço `app` do compose sobe com `docker compose --profile app up -d`.
 
 ## Testes
 

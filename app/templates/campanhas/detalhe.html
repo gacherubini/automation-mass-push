@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}{{ campanha.nome }} — Prospecção{% endblock %}
+{% block content %}
+<p class="muted small"><a href="/app">← Início</a></p>
+<h1>{{ campanha.nome }}</h1>
+<p class="lead">
+  <span class="badge {{ campanha.status.value }}">{{ campanha.status.value }}</span>
+  · {{ total_leads }} leads
+  {% if campanha.motivo_pausa %}
+  · <span style="color:var(--danger)">{{ campanha.motivo_pausa }}</span>
+  {% endif %}
+</p>
+
+<div class="stats">
+  {% for st, n in por_status.items() %}
+  <div class="stat">
+    <b>{{ n }}</b>
+    <span>{{ st.value if st.value is defined else st }}</span>
+  </div>
+  {% else %}
+  <div class="stat"><b>0</b><span>leads</span></div>
+  {% endfor %}
+</div>
+
+<p class="btn-row">
+  <a class="btn" href="/campanhas/{{ campanha.id }}/leads">Ver leads</a>
+</p>
+
+<section class="card">
+  <h2>Modelos de mensagem</h2>
+  <p class="muted small">
+    Lacunas: <span class="mono">{nome}</span>
+    <span class="mono">{categoria}</span>
+    <span class="mono">{endereco}</span>
+    <span class="mono">{busca}</span>.
+    Separe variações com uma linha <span class="mono">---</span> sozinha.
+    Texto idêntico em muitos números é sinal de spam — use várias variações.
+  </p>
+
+  {% if aviso_modelo %}<div class="flash erro">{{ aviso_modelo }}</div>{% endif %}
+  {% if aviso_diversidade %}<div class="flash aviso">{{ aviso_diversidade }}</div>{% endif %}
+
+  <form method="post" action="/campanhas/{{ campanha.id }}/modelos">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Variações
+      <textarea name="modelos_texto" placeholder="Oi! Vi a {nome} no Google Maps e achei interessante...
+---
+Olá! Passando para conhecer a {nome}, de {categoria}...">{{ modelos_texto }}</textarea>
+    </label>
+    <button class="btn btn-primary" type="submit">Salvar modelos</button>
+  </form>
+
+  {% if previas %}
+  <h2 style="margin-top:20px">Prévia com leads reais</h2>
+  {% for p in previas %}
+  <div class="previa"><strong>{{ p.nome }}</strong> · {{ p.telefone }}
+{{ p.texto }}</div>
+  {% endfor %}
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Ritmo</h2>
+  <p class="muted small">
+    O sistema avisa quando a configuração fica agressiva — não bloqueia.
+    Padrão seguro: intervalo 120–300s e teto sob aquecimento.
+  </p>
+
+  {% if avisos_ritmo %}
+  <div class="flash aviso">
+    {% for a in avisos_ritmo %}<div>{{ a }}</div>{% endfor %}
+  </div>
+  {% endif %}
+
+  <form method="post" action="/campanhas/{{ campanha.id }}/ritmo">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="grid-2">
+      <label>Teto diário
+        <input type="number" name="teto_diario" min="1" value="{{ campanha.teto_diario }}">
+      </label>
+      <label>Intervalo mín. (s)
+        <input type="number" name="intervalo_min_seg" min="1" value="{{ campanha.intervalo_min_seg }}">
+      </label>
+      <label>Intervalo máx. (s)
+        <input type="number" name="intervalo_max_seg" min="1" value="{{ campanha.intervalo_max_seg }}">
+      </label>
+      <label>Início
+        <input type="time" name="hora_inicio" value="{{ campanha.hora_inicio.strftime('%H:%M') }}">
+      </label>
+      <label>Fim
+        <input type="time" name="hora_fim" value="{{ campanha.hora_fim.strftime('%H:%M') }}">
+      </label>
+    </div>
+    <label class="check">
+      <input type="checkbox" name="dias_uteis_apenas" value="1" {% if campanha.dias_uteis_apenas %}checked{% endif %}>
+      Só dias úteis
+    </label>
+    <label class="check">
+      <input type="checkbox" name="respeitar_aquecimento" value="1" {% if campanha.respeitar_aquecimento %}checked{% endif %}>
+      Respeitar aquecimento da conexão
+    </label>
+    <div class="btn-row">
+      <button class="btn btn-primary" type="submit">Salvar ritmo</button>
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Disparo</h2>
+  <p class="muted">
+    O motor de disparo ainda está em construção. Quando existir, o botão de iniciar
+    campanha entra aqui — e só libera se houver conexão ativa, modelos válidos e
+    leads pendentes.
+  </p>
+</section>
+{% endblock %}

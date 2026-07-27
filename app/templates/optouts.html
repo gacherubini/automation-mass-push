@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Opt-outs — Prospecção{% endblock %}
+{% block content %}
+<h1>Opt-outs</h1>
+<p class="lead">Quem pediu para parar. Vale para todas as campanhas, para sempre.</p>
+
+<section class="card">
+  {% if optouts %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Telefone</th>
+          <th>Motivo</th>
+          <th>Quando</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in optouts %}
+        <tr>
+          <td class="mono">{{ o.telefone }}</td>
+          <td>{{ o.motivo or '—' }}</td>
+          <td class="muted small">{{ o.criado_em.strftime('%d/%m/%Y %H:%M') if o.criado_em else '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">Nenhum opt-out registrado.</div>
+  {% endif %}
+</section>
+{% endblock %}

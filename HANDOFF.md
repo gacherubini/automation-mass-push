@@ -125,15 +125,16 @@ python -m pytest tests/ -q
 - [x] `app/auth.py` — argon2 + sessão assinada com `itsdangerous`
   - [x] hash/verify, login, sessao, CSRF
   - [x] testes em `tests/test_auth.py`
-- [ ] `app/main.py` — rotas
-- [ ] Tela de login
-- [ ] Tela de conexão com QR code — **com o aviso de risco de ban do número**
-- [ ] Tela de nova campanha: upload do `.xlsx` + relatório de importação
-- [ ] Editor de mensagem com prévia preenchida
-- [ ] Tela de configuração de ritmo, com os avisos de `Perfil.avisos()`
-- [ ] Acompanhamento do disparo ao vivo
-- [ ] Lista de leads com status e filtro
-- [ ] Tela/exportação de opt-outs
+- [x] `app/main.py` — rotas (login, bootstrap, home, conexão, campanhas, leads, opt-outs)
+  - [x] testes de rota em `tests/test_main.py` (TestClient + SQLite)
+- [x] Tela de login (+ bootstrap do primeiro usuário)
+- [x] Tela de conexão com QR code — **com o aviso de risco de ban do número**
+- [x] Tela de nova campanha: upload do `.xlsx` + relatório de importação
+- [x] Editor de mensagem com prévia preenchida
+- [x] Tela de configuração de ritmo, com os avisos de `Perfil.avisos()`
+- [ ] Acompanhamento do disparo ao vivo (depende de `disparo.py`)
+- [x] Lista de leads com status e filtro
+- [x] Tela de opt-outs (lista; exportação CSV ainda não)
 
 ### Motor de disparo
 
@@ -269,9 +270,10 @@ que atacar, porque cada passo destrava o seguinte.
    testados (181 testes no total) e commitados. Dockerfile e compose com
    profile `app` incluídos.
 2. ~~**`app/auth.py`**~~ — feito (argon2 + CSRF + testes).
-3. **`app/main.py` + templates Jinja2** — telas: login, conexão (QR), nova
-   campanha (upload + relatório de import), editor de mensagem com prévia,
-   acompanhamento do disparo, lista de leads.
+3. ~~**`app/main.py` + templates Jinja2**~~ — feito o esqueleto logado: login,
+   bootstrap, conexão (QR + aviso de ban), nova campanha com import, editor de
+   mensagem com prévia, ritmo com avisos, lista de leads e opt-outs. Falta o
+   acompanhamento ao vivo (vem com o motor).
 4. **`app/disparo.py`** — o motor. É a peça mais delicada:
    - laço que pega o próximo lead pendente, chama `ritmo.avaliar(...)`, e só
      envia se `liberado`

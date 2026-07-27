@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Conexão — Prospecção{% endblock %}
+{% block content %}
+<h1>Conectar WhatsApp</h1>
+<p class="lead">Cada usuário conecta o próprio número por QR code. As mensagens saem desse número.</p>
+
+<div class="alert-ban" role="alert">
+  <strong>Risco de banimento é do número que escanear o QR.</strong>
+  <p class="small" style="margin:8px 0 0">
+    Automação não-oficial para mensagem não solicitada viola os termos do WhatsApp.
+    Ferramentas que simulam o WhatsApp Web são apontadas como causa nº 1 de banimento
+    em massa. O ritmo controlado reduz o risco — não elimina. Mande menos, para quem
+    tem chance real de interesse, e pare na primeira negativa.
+  </p>
+</div>
+
+{% if erro_evolution %}
+<div class="flash erro">{{ erro_evolution }}</div>
+{% endif %}
+
+<section class="card">
+  {% if conexao %}
+    <p>
+      Status local:
+      <span class="badge {{ conexao.status.value }}">{{ conexao.status.value }}</span>
+      {% if estado_api %}
+        · API: <span class="badge {{ estado_api.estado }}">{{ estado_api.estado }}</span>
+      {% endif %}
+    </p>
+    {% if conexao.numero %}
+      <p>Número: <span class="mono">{{ conexao.numero }}</span></p>
+    {% endif %}
+    <p class="muted small">Instância: <span class="mono">{{ conexao.nome_instancia }}</span></p>
+
+    {% if qr_data_uri %}
+      <h2>Escaneie o QR</h2>
+      <img class="qr" src="{{ qr_data_uri }}" alt="QR code do WhatsApp">
+      <p class="muted small">Atualize a página depois de escanear para confirmar a conexão.</p>
+    {% endif %}
+
+    <div class="btn-row">
+      {% if conexao.status.value != 'conectada' %}
+      <form method="post" action="/conexao/criar">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn btn-primary" type="submit">Gerar / atualizar QR</button>
+      </form>
+      {% endif %}
+      <form method="post" action="/conexao/desconectar">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn btn-danger" type="submit">Desconectar</button>
+      </form>
+      <a class="btn" href="/conexao">Atualizar status</a>
+    </div>
+  {% else %}
+    <p class="muted">Nenhuma instância criada ainda.</p>
+    <form method="post" action="/conexao/criar">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn btn-primary" type="submit">Criar conexão e gerar QR</button>
+    </form>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Início — Prospecção{% endblock %}
+{% block content %}
+<h1>Olá, {{ usuario.nome }}</h1>
+<p class="lead">Conecte o WhatsApp, suba a planilha do Maps e dispare com ritmo humano.</p>
+
+<div class="grid-2">
+  <section class="card">
+    <h2>Conexão</h2>
+    {% if conexoes %}
+      {% set c = conexoes[0] %}
+      <p>
+        <span class="badge {{ c.status.value }}">{{ c.status.value }}</span>
+        {% if c.numero %}<span class="mono"> {{ c.numero }}</span>{% endif %}
+      </p>
+      <p class="muted small">Instância: <span class="mono">{{ c.nome_instancia }}</span>
+        {% if c.conectada_em %} · aquecimento desde {{ c.conectada_em.strftime('%d/%m/%Y') }}{% endif %}
+      </p>
+    {% else %}
+      <p class="muted">Nenhum WhatsApp conectado ainda.</p>
+    {% endif %}
+    <div class="btn-row">
+      <a class="btn btn-primary" href="/conexao">Gerenciar conexão</a>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Nova campanha</h2>
+    <p class="muted">Suba o <span class="mono">.xlsx</span> do scraper do Google Maps.</p>
+    <div class="btn-row">
+      <a class="btn btn-primary" href="/campanhas/nova">Criar campanha</a>
+    </div>
+  </section>
+</div>
+
+<section class="card">
+  <h2>Campanhas</h2>
+  {% if campanhas %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Status</th>
+          <th>Teto/dia</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in campanhas %}
+        <tr>
+          <td>{{ c.nome }}</td>
+          <td><span class="badge {{ c.status.value }}">{{ c.status.value }}</span></td>
+          <td>{{ c.teto_diario }}</td>
+          <td><a href="/campanhas/{{ c.id }}">Abrir</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">Nenhuma campanha ainda.</div>
+  {% endif %}
+</section>
+{% endblock %}

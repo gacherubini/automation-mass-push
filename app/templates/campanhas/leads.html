@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Leads — {{ campanha.nome }}{% endblock %}
+{% block content %}
+<p class="muted small"><a href="/campanhas/{{ campanha.id }}">← {{ campanha.nome }}</a></p>
+<h1>Leads</h1>
+
+<form method="get" class="card" style="padding:14px 18px">
+  <label>Filtrar por status
+    <select name="status" onchange="this.form.submit()">
+      <option value="">todos</option>
+      {% for s in status_opcoes %}
+      <option value="{{ s.value }}" {% if status_filtro == s.value %}selected{% endif %}>{{ s.value }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
+
+<section class="card">
+  {% if leads %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Telefone</th>
+          <th>Categoria</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for l in leads %}
+        <tr>
+          <td>{{ l.nome }}</td>
+          <td class="mono">{{ l.telefone_exibicao or l.telefone or '—' }}</td>
+          <td class="muted">{{ l.categoria or '—' }}</td>
+          <td><span class="badge {{ l.status.value }}">{{ l.status.value }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">Nenhum lead neste filtro.</div>
+  {% endif %}
+</section>
+{% endblock %}

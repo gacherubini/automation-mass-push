@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Entrar — Prospecção{% endblock %}
+{% block content %}
+<div class="login-wrap">
+  <div class="login-card card">
+    <h1>Entrar</h1>
+    <p class="lead">Disparo com ritmo controlado a partir do seu próprio WhatsApp.</p>
+
+    {% if erro %}<div class="flash erro" role="alert">{{ erro }}</div>{% endif %}
+
+    <form method="post" action="/login">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>E-mail
+        <input type="email" name="email" autocomplete="email" required>
+      </label>
+      <label>Senha
+        <input type="password" name="senha" autocomplete="current-password" required>
+      </label>
+      <div class="btn-row">
+        <button class="btn btn-primary" type="submit">Entrar</button>
+      </div>
+    </form>
+
+    {% if precisa_bootstrap %}
+    <p class="muted small" style="margin-top:18px">
+      Primeira vez? <a href="/bootstrap">Crie a conta inicial</a>.
+    </p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

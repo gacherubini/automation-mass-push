@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Criar conta — Prospecção{% endblock %}
+{% block content %}
+<div class="login-wrap">
+  <div class="login-card card">
+    <h1>Conta inicial</h1>
+    <p class="lead">Só funciona enquanto não existe nenhum usuário no banco.</p>
+
+    {% if erro %}<div class="flash erro" role="alert">{{ erro }}</div>{% endif %}
+
+    <form method="post" action="/bootstrap">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>Nome
+        <input type="text" name="nome" value="{{ nome or '' }}" required>
+      </label>
+      <label>E-mail
+        <input type="email" name="email" value="{{ email or '' }}" required>
+      </label>
+      <label>Senha (mín. 8)
+        <input type="password" name="senha" minlength="8" required>
+      </label>
+      <div class="btn-row">
+        <button class="btn btn-primary" type="submit">Criar e entrar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
