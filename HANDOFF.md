@@ -36,28 +36,124 @@ Nome | Telefone | Endereco | Categoria | Nota | Avaliacoes | Anuncio | Link Maps
 
 ---
 
-## 2. Estado atual
+## 2. Checklist
 
-| Módulo | Estado | Observação |
-|---|---|---|
-| `app/telefone.py` | ✅ pronto, testado | Normalização BR → E.164, classifica celular/fixo/inválido |
-| `app/ritmo.py` | ✅ pronto, testado | Política anti-ban: aquecimento, tetos, janela, freio |
-| `app/planilha.py` | 🚧 em andamento | Import do `.xlsx` |
-| `app/mensagem.py` | 🚧 em andamento | Modelo com lacunas + variações |
-| `app/config.py`, `db.py`, `models.py` | 🚧 em andamento | Entidades e conexão |
-| `alembic/`, `docker-compose.yml` | 🚧 em andamento | Migrações e os 3 containers |
-| `app/evolution.py` | 🚧 em andamento | Cliente HTTP da Evolution API |
-| `app/auth.py` | ❌ não começado | Login argon2 + sessão assinada |
-| `app/main.py` + templates | ❌ não começado | Dashboard |
-| `app/disparo.py` | ❌ não começado | Motor de fila; costura ritmo + evolution + banco |
-| IA respondendo (Gemini + n8n) | ❌ fora de escopo agora | **Fase 2**, decidida para depois |
+Marque o item **só quando tiver teste passando ou verificação real** — não
+quando o arquivo existir. Se um item ficar pela metade, deixe desmarcado e
+escreva embaixo dele o que falta.
 
-Rodar os testes:
+Rodar os testes antes de marcar qualquer coisa:
 
 ```bash
 cd C:\Users\guilh\Documents\codigo\automation-mass-push
 python -m pytest tests/ -q
 ```
+
+### Núcleo de decisão (funções puras, sem banco nem rede)
+
+- [x] `app/telefone.py` — normalização BR → E.164
+  - [x] aceita qualquer pontuação, DDI, zero do DDD
+  - [x] classifica celular / fixo / inválido
+  - [x] valida DDD contra a lista real
+  - [x] variantes do nono dígito
+  - [x] normalização estável, para deduplicação funcionar
+- [x] `app/ritmo.py` — política anti-ban
+  - [x] aquecimento por idade da conexão
+  - [x] teto diário e teto horário
+  - [x] janela de horário comercial e dias úteis
+  - [x] intervalo aleatório com `random.Random` injetável
+  - [x] freio de reputação por bloqueio (>2%) e resposta (<15%)
+  - [x] amostra mínima antes de acionar o freio
+  - [x] avisos de configuração agressiva, sem bloquear o usuário
+  - [x] invariantes do padrão travadas por teste (sob 30/h, sem rajada, cabe na janela)
+- [ ] `app/planilha.py` — import do `.xlsx` do scraper
+  - [ ] mapeia colunas pelo cabeçalho, tolerante a acento/caixa/ordem
+  - [ ] erro claro quando falta coluna essencial
+  - [ ] descarta fixo e inválido, contando cada motivo
+  - [ ] deduplica dentro da própria planilha
+  - [ ] relatório de importação para a tela
+  - [ ] aceita caminho e file-like (upload)
+- [ ] `app/mensagem.py` — modelo com lacunas
+  - [ ] lacunas `{nome}` `{categoria}` `{endereco}` `{busca}`
+  - [ ] múltiplas variações, sorteadas por lead
+  - [ ] validação do modelo antes do disparo, com erro claro
+  - [ ] tratamento de lacuna sem valor (nunca sai "None" nem chave crua)
+  - [ ] prévia preenchida com leads reais
+  - [ ] medida de diversidade, para avisar quando há variações de menos
+
+### Infraestrutura
+
+- [ ] `app/config.py` — configuração por variável de ambiente, sem segredo no código
+- [ ] `app/db.py` — engine, sessionmaker, dependência FastAPI
+- [ ] `app/models.py` — as 7 entidades
+  - [ ] `Usuario`
+  - [ ] `Conexao` (instância WhatsApp; `conectada_em` alimenta o aquecimento)
+  - [ ] `Campanha` (guarda o Perfil de ritmo e os modelos de mensagem)
+  - [ ] `Lead`
+  - [ ] `Mensagem` (texto realmente enviado, id externo)
+  - [ ] `OptOut` (global por usuário, unique)
+  - [ ] `JaContatado` (global por usuário, unique)
+  - [ ] índices nas consultas quentes
+- [ ] `alembic/` + primeira migração
+- [ ] `docker-compose.yml` — app + Postgres + Evolution API, com volumes
+- [ ] `.env.example` documentado
+- [ ] `Dockerfile` do app
+
+### Integração com o WhatsApp
+
+- [ ] `app/evolution.py` — cliente HTTP
+  - [ ] criar instância
+  - [ ] obter QR code
+  - [ ] consultar estado da conexão e número conectado
+  - [ ] desconectar
+  - [ ] checar se número tem WhatsApp (em lote)
+  - [ ] enviar mensagem de texto
+  - [ ] interpretar payload de webhook, ignorando `fromMe`
+  - [ ] exceções próprias com mensagem útil em português
+  - [ ] retry só em operação segura — **nunca** em envio
+  - [ ] testes com `httpx.MockTransport`, sem rede
+
+### Dashboard
+
+- [ ] `app/auth.py` — argon2 + sessão assinada com `itsdangerous`
+- [ ] `app/main.py` — rotas
+- [ ] Tela de login
+- [ ] Tela de conexão com QR code — **com o aviso de risco de ban do número**
+- [ ] Tela de nova campanha: upload do `.xlsx` + relatório de importação
+- [ ] Editor de mensagem com prévia preenchida
+- [ ] Tela de configuração de ritmo, com os avisos de `Perfil.avisos()`
+- [ ] Acompanhamento do disparo ao vivo
+- [ ] Lista de leads com status e filtro
+- [ ] Tela/exportação de opt-outs
+
+### Motor de disparo
+
+- [ ] `app/disparo.py`
+  - [ ] laço que consulta `ritmo.avaliar()` antes de cada envio
+  - [ ] pausa a campanha e grava `motivo_pausa` quando `freio_permanente`
+  - [ ] dorme `ritmo.proximo_intervalo()` entre envios
+  - [ ] checa WhatsApp antes de enviar, testando as variantes do nono dígito
+  - [ ] grava em `JaContatado`, nunca repetindo entre campanhas
+  - [ ] respeita `OptOut` sempre
+  - [ ] registra falha sem reenviar
+  - [ ] retomar campanha pausada sem duplicar o que já saiu
+- [ ] Webhook de resposta
+  - [ ] marca o lead como *Respondeu*
+  - [ ] detecta pedido de opt-out e grava em `OptOut`
+  - [ ] alimenta as contagens que o freio de reputação usa
+
+### Fechamento da Fase 1
+
+- [ ] Teste de ponta a ponta com a Evolution rodando em Docker
+- [ ] Um disparo real, de baixo volume, para números conhecidos
+- [ ] README com instruções de instalação para os amigos
+- [ ] Checklist deste documento revisado e atualizado
+
+### Fase 2 — decidida para depois, não comece sem combinar
+
+- [ ] IA (Gemini via n8n) respondendo o lead
+- [ ] Regras de quando a IA passa a conversa para humano
+- [ ] Deploy em nuvem (Fly.io), para funcionar com o PC desligado
 
 ---
 
@@ -155,6 +251,9 @@ português, explicando a motivação, não o diff.
 ---
 
 ## 6. Próximos passos, em ordem
+
+A lista granular está na [seção 2](#2-checklist). Aqui fica só a **ordem** em
+que atacar, porque cada passo destrava o seguinte.
 
 1. **Integrar o que os três agentes paralelos entregaram** (planilha, mensagem,
    infra, evolution). Rodar a suíte inteira, resolver conflito de import,
