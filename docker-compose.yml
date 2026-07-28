@@ -33,8 +33,9 @@ services:
       retries: 10
 
   evolution-api:
-    # Imagem oficial mudou de atendai/* para evoapicloud/* a partir da v2.3.
-    image: evoapicloud/evolution-api:v2.2.3
+    # Imagem oficial mudou de atendai/* para evoapicloud/*. latest traz Baileys
+    # mais novo — versao pinada antiga (v2.2.3) gerava QR vazio (count:0).
+    image: evoapicloud/evolution-api:latest
     restart: unless-stopped
     depends_on:
       postgres:
@@ -76,8 +77,12 @@ services:
       DEL_INSTANCE: "false"
 
       # Como o aparelho aparece na lista de dispositivos conectados do celular.
-      CONFIG_SESSION_PHONE_CLIENT: ${EVOLUTION_NOME_CLIENTE:-Prospeccao}
+      # CLIENT/NAME/VERSION formam o User-Agent do WhatsApp Web. Versao errada
+      # ou ausente faz o Baileys abrir websocket e fechar antes do QR (count:0).
+      CONFIG_SESSION_PHONE_CLIENT: ${EVOLUTION_NOME_CLIENTE:-Chrome}
       CONFIG_SESSION_PHONE_NAME: Chrome
+      # Atualize se o QR voltar a falhar: veja a versao no rodape do WhatsApp Web.
+      CONFIG_SESSION_PHONE_VERSION: ${CONFIG_SESSION_PHONE_VERSION:-2.3000.1023204200}
 
       QRCODE_LIMIT: "30"
       QRCODE_COLOR: "#000000"

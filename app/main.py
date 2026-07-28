@@ -43,7 +43,9 @@ from app.evolution import (
     CONECTADA,
     Evolution,
     ErroEvolution,
+    InstanciaNaoEncontrada,
     JaConectado,
+    RespostaInesperada,
     interpretar_webhook,
 )
 from app.models import (
@@ -356,28 +358,47 @@ def criar_app(
             _flash(request, "erro", "Ja existe um WhatsApp conectado.")
             return RedirectResponse("/conexao", status_code=303)
 
-        nome = _nome_instancia(usuario)
         try:
             with app.state.fabrica_evolution() as evo:  # type: ignore[attr-defined]
                 if existente is None:
-                    evo.criar_instancia(nome)
+                    nome = _nome_instancia(usuario)
+                    inst = evo.criar_instancia(nome)
                     conexao = Conexao(
                         usuario_id=usuario.id,
                         nome_instancia=nome,
                         status=StatusConexao.AGUARDANDO_QR,
                     )
                     sessao.add(conexao)
+                    # Se o create nao trouxe QR, puxa com retry (Baileys demora).
+                    if inst.qrcode is None or inst.qrcode.vazio:
+                        evo.obter_qrcode(nome)
                 else:
-                    # Reusa a instancia se ainda existir no servidor.
+                    # Reusa a MESMA instancia. QR vazio nao justifica criar outra
+                    # (isso gerava dezenas de orfas e o Baileys entrava em loop).
                     try:
                         evo.obter_qrcode(existente.nome_instancia)
                         existente.status = StatusConexao.AGUARDANDO_QR
-                    except ErroEvolution:
+                    except InstanciaNaoEncontrada:
+                        nome = _nome_instancia(usuario)
                         evo.criar_instancia(nome)
                         existente.nome_instancia = nome
                         existente.status = StatusConexao.AGUARDANDO_QR
                         existente.numero = None
                         existente.conectada_em = None
+                        evo.obter_qrcode(nome)
+                    except RespostaInesperada:
+                        # Instancia existe mas o QR nao veio: nao cria orfa.
+                        existente.status = StatusConexao.AGUARDANDO_QR
+                        sessao.commit()
+                        _flash(
+                            request,
+                            "erro",
+                            "A Evolution esta no ar, mas ainda nao gerou o QR. "
+                            "Espere uns segundos e clique em Atualizar status. "
+                            "Se persistir, reinicie o container da Evolution "
+                            "(docker compose restart evolution-api).",
+                        )
+                        return RedirectResponse("/conexao", status_code=303)
                 sessao.commit()
         except ErroEvolution as erro:
             sessao.rollback()

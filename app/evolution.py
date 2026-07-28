@@ -546,32 +546,56 @@ class Evolution:
         )
         return self._ler_instancia(nome, dado)
 
-    def obter_qrcode(self, nome: str) -> QrCode:
+    def obter_qrcode(
+        self,
+        nome: str,
+        *,
+        tentativas: int = 6,
+        espera_entre: float = 2.0,
+    ) -> QrCode:
         """Busca o QR code para o dashboard exibir.
+
+        A Evolution as vezes responde `{"count": 0}` enquanto o Baileys ainda
+        esta abrindo o websocket. Em vez de falhar na primeira, esperamos e
+        tentamos de novo — so depois disso reclamamos.
 
         Levanta `JaConectado` se a instancia ja esta conectada - nesse caso nao
         ha QR nenhum e mostrar um quadrado vazio confundiria o usuario.
         """
-        dado = self._requisitar(
-            "GET", f"/instance/connect/{nome}", timeout=self._timeout_qrcode
+        tentativas = max(1, tentativas)
+        ultimo: Any = {}
+
+        for i in range(1, tentativas + 1):
+            dado = self._requisitar(
+                "GET", f"/instance/connect/{nome}", timeout=self._timeout_qrcode
+            )
+            ultimo = dado
+
+            # /instance/connect engole a excecao e devolve 200 com {error: true}.
+            self._verificar_erro_embutido(nome, dado)
+
+            estado = _ESTADOS_DA_API.get(
+                _texto(_dict(dado.get("instance")).get("state"))
+            )
+            if estado == CONECTADA:
+                raise JaConectado(
+                    f'A conexao "{nome}" ja esta ativa. Desconecte antes de ler um novo QR code.'
+                )
+
+            qrcode = _extrair_qrcode(dado)
+            if not qrcode.vazio:
+                return qrcode
+
+            if i < tentativas:
+                self._dormir(espera_entre)
+
+        raise RespostaInesperada(
+            f'O servidor nao devolveu QR code para "{nome}" depois de '
+            f"{tentativas} tentativas. Confira se a Evolution esta no ar e se "
+            f"CONFIG_SESSION_PHONE_VERSION esta atualizada; depois reinicie o "
+            f"container e tente de novo.",
+            detalhe=ultimo,
         )
-
-        # /instance/connect engole a excecao e devolve 200 com {error: true}.
-        self._verificar_erro_embutido(nome, dado)
-
-        estado = _ESTADOS_DA_API.get(_texto(_dict(dado.get("instance")).get("state")))
-        if estado == CONECTADA:
-            raise JaConectado(
-                f'A conexao "{nome}" ja esta ativa. Desconecte antes de ler um novo QR code.'
-            )
-
-        qrcode = _extrair_qrcode(dado)
-        if qrcode.vazio:
-            raise RespostaInesperada(
-                f'O servidor nao devolveu QR code para "{nome}". Tente novamente em alguns segundos.',
-                detalhe=dado,
-            )
-        return qrcode
 
     def estado_conexao(self, nome: str) -> EstadoConexao:
         """Estado atual da conexao e, quando conectada, o numero do usuario."""

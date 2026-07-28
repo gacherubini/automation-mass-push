@@ -141,6 +141,23 @@ class TestQrCode:
         assert qr.imagem == "data:image/png;base64,AAA"
         assert qr.codigo == "2@xyz"
 
+    def test_repete_quando_count_zero_ate_vir_qr(self):
+        n = {"i": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            n["i"] += 1
+            if n["i"] < 3:
+                return _json(200, {"count": 0})
+            return _json(
+                200,
+                {"base64": "iVBORw0KGgo=", "code": "2@abc", "count": 1},
+            )
+
+        with _cliente(handler) as evo:
+            qr = evo.obter_qrcode("dono-1", tentativas=5, espera_entre=0)
+        assert not qr.vazio
+        assert n["i"] == 3
+
     def test_ja_conectado_levanta(self):
         def handler(request: httpx.Request) -> httpx.Response:
             return _json(200, {"instance": {"state": "open"}})
