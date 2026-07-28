@@ -79,6 +79,7 @@ def client(fabrica, gerenciador) -> Iterator[TestClient]:
             RuntimeError("evolution nao deveria ser chamada neste teste")
         ),
         gerenciador_disparo=gerenciador,  # type: ignore[arg-type]
+        retomar_no_startup=False,
     )
 
     def _sessao() -> Iterator[Session]:

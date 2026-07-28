@@ -18,24 +18,39 @@
 <div class="flash erro">{{ erro_evolution }}</div>
 {% endif %}
 
-<section class="card">
+<section class="card" id="painel-conexao"
+  data-status="{% if estado_api %}{{ estado_api.estado }}{% elif conexao %}{{ conexao.status.value }}{% else %}nenhuma{% endif %}"
+  data-poll-url="/conexao/status">
   {% if conexao %}
     <p>
       Status local:
-      <span class="badge {{ conexao.status.value }}">{{ conexao.status.value }}</span>
+      <span class="badge {{ conexao.status.value }}" id="badge-local">{{ conexao.status.value }}</span>
       {% if estado_api %}
-        · API: <span class="badge {{ estado_api.estado }}">{{ estado_api.estado }}</span>
+        · API: <span class="badge {{ estado_api.estado }}" id="badge-api">{{ estado_api.estado }}</span>
+      {% else %}
+        · API: <span class="badge" id="badge-api">—</span>
       {% endif %}
     </p>
-    {% if conexao.numero %}
-      <p>Número: <span class="mono">{{ conexao.numero }}</span></p>
-    {% endif %}
+    <p id="linha-numero" {% if not conexao.numero %}style="display:none"{% endif %}>
+      Número: <span class="mono" id="span-numero">{{ conexao.numero or '' }}</span>
+    </p>
     <p class="muted small">Instância: <span class="mono">{{ conexao.nome_instancia }}</span></p>
 
-    {% if qr_data_uri %}
+    {% if qr_data_uri and conexao.status.value != 'conectada' %}
       <h2>Escaneie o QR</h2>
-      <img class="qr" src="{{ qr_data_uri }}" alt="QR code do WhatsApp">
-      <p class="muted small">Atualize a página depois de escanear para confirmar a conexão.</p>
+      <img class="qr" id="img-qr" src="{{ qr_data_uri }}" alt="QR code do WhatsApp">
+      <p class="muted small" id="dica-qr">
+        No celular: WhatsApp → Aparelhos conectados → Conectar um aparelho.
+        O QR expira em cerca de 40 segundos. Esta página detecta o pareamento sozinha.
+      </p>
+      <p class="flash aviso small" id="msg-aguardando">
+        Aguardando você escanear… se o celular disser “não foi possível vincular”,
+        use <strong>Recomeçar do zero</strong> abaixo e escaneie o QR novo na hora.
+      </p>
+    {% elif conexao.status.value == 'conectada' %}
+      <div class="flash ok">WhatsApp conectado e pronto para disparar.</div>
+    {% elif not qr_data_uri %}
+      <p class="muted">Sem QR no momento. Clique em gerar/atualizar ou recomeçar do zero.</p>
     {% endif %}
 
     <div class="btn-row">
@@ -44,12 +59,17 @@
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <button class="btn btn-primary" type="submit">Gerar / atualizar QR</button>
       </form>
+      <form method="post" action="/conexao/recriar"
+            onsubmit="return confirm('Apaga a instância atual e cria uma nova. Continuar?');">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn" type="submit">Recomeçar do zero</button>
+      </form>
       {% endif %}
       <form method="post" action="/conexao/desconectar">
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <button class="btn btn-danger" type="submit">Desconectar</button>
       </form>
-      <a class="btn" href="/conexao">Atualizar status</a>
+      <a class="btn" href="/conexao">Atualizar agora</a>
     </div>
   {% else %}
     <p class="muted">Nenhuma instância criada ainda.</p>
@@ -59,4 +79,52 @@
     </form>
   {% endif %}
 </section>
+
+<script>
+(() => {
+  const painel = document.getElementById('painel-conexao');
+  if (!painel) return;
+  const url = painel.dataset.pollUrl;
+  let status = painel.dataset.status || '';
+  if (status === 'conectada' || status === 'nenhuma') return;
+
+  const tick = async () => {
+    try {
+      const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!r.ok) throw new Error('status ' + r.status);
+      const d = await r.json();
+      if (!d.existe) return;
+      const badgeApi = document.getElementById('badge-api');
+      const badgeLocal = document.getElementById('badge-local');
+      if (badgeApi) {
+        badgeApi.textContent = d.status;
+        badgeApi.className = 'badge ' + d.status;
+      }
+      if (badgeLocal && d.conectada) {
+        badgeLocal.textContent = 'conectada';
+        badgeLocal.className = 'badge conectada';
+      }
+      if (d.numero) {
+        const linha = document.getElementById('linha-numero');
+        const span = document.getElementById('span-numero');
+        if (linha) linha.style.display = '';
+        if (span) span.textContent = d.numero;
+      }
+      if (d.conectada) {
+        const dica = document.getElementById('msg-aguardando');
+        if (dica) {
+          dica.className = 'flash ok small';
+          dica.textContent = 'Conectado! Recarregando…';
+        }
+        setTimeout(() => { window.location.href = '/conexao'; }, 800);
+        return;
+      }
+    } catch (e) {
+      // Docker caiu no meio: tenta de novo.
+    }
+    setTimeout(tick, 2500);
+  };
+  setTimeout(tick, 2000);
+})();
+</script>
 {% endblock %}

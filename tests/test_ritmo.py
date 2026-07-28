@@ -72,6 +72,17 @@ class TestJanelaDeHorario:
         assert ritmo.dentro_da_janela(perfil, datetime(2026, 7, 28, 9, 0))
         assert not ritmo.dentro_da_janela(perfil, datetime(2026, 7, 28, 18, 0))
 
+    def test_converte_utc_para_fuso_de_sao_paulo(self):
+        # 12:00 UTC = 09:00 em Sao Paulo (UTC-3) — deve liberar.
+        from datetime import timezone
+
+        perfil = ritmo.Perfil(hora_inicio=time(9, 0), hora_fim=time(18, 0))
+        meio_dia_utc = datetime(2026, 7, 28, 12, 0, tzinfo=timezone.utc)
+        assert ritmo.dentro_da_janela(perfil, meio_dia_utc)
+        # 21:00 UTC = 18:00 SP — limite exclusivo, bloqueia.
+        dezoito_sp_em_utc = datetime(2026, 7, 28, 21, 0, tzinfo=timezone.utc)
+        assert not ritmo.dentro_da_janela(perfil, dezoito_sp_em_utc)
+
 
 class TestTetoPorHora:
     def test_barra_ao_encostar_no_teto_horario(self):

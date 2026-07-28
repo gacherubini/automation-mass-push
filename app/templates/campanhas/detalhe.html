@@ -26,32 +26,60 @@
   <a class="btn" href="/campanhas/{{ campanha.id }}/leads">Ver leads</a>
 </p>
 
+{# ========== MENSAGENS ========== #}
 <section class="card">
   <h2>Modelos de mensagem</h2>
-  <p class="muted small">
-    Lacunas: <span class="mono">{nome}</span>
-    <span class="mono">{categoria}</span>
-    <span class="mono">{endereco}</span>
-    <span class="mono">{busca}</span>.
-    Separe variações com uma linha <span class="mono">---</span> sozinha.
-    Texto idêntico em muitos números é sinal de spam — use várias variações.
-  </p>
+
+  <div class="help-box">
+    <strong>{{ expl_msg.titulo }}</strong>
+    {% for p in expl_msg.paragrafos %}
+    <p class="muted small">{{ p }}</p>
+    {% endfor %}
+    <p class="small" style="margin:10px 0 6px"><strong>Lacunas que você pode usar</strong></p>
+    <ul class="help-list">
+      {% for codigo, desc in expl_msg.lacunas %}
+      <li><span class="mono">{{ codigo }}</span> — {{ desc }}</li>
+      {% endfor %}
+    </ul>
+    <p class="small" style="margin:10px 0 6px"><strong>Dicas</strong></p>
+    <ul class="help-list">
+      {% for d in expl_msg.dicas %}
+      <li>{{ d }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <p class="small" style="margin:16px 0 8px"><strong>Templates prontos</strong> — clique para copiar pro editor (depois salve):</p>
+  <div class="preset-grid">
+    {% for pack in presets_mensagem %}
+    <div class="preset-card">
+      <strong>{{ pack.titulo }}</strong>
+      <p class="muted small">{{ pack.descricao }}</p>
+      <button type="button" class="btn btn-primary btn-sm js-aplicar-msg"
+              data-preset-id="{{ pack.id }}">Usar este template</button>
+    </div>
+    <script type="text/plain" id="preset-msg-{{ pack.id }}">{{ pack.texto }}</script>
+    {% endfor %}
+  </div>
 
   {% if aviso_modelo %}<div class="flash erro">{{ aviso_modelo }}</div>{% endif %}
   {% if aviso_diversidade %}<div class="flash aviso">{{ aviso_diversidade }}</div>{% endif %}
 
-  <form method="post" action="/campanhas/{{ campanha.id }}/modelos">
+  <form method="post" action="/campanhas/{{ campanha.id }}/modelos" id="form-modelos">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <label>Variações
-      <textarea name="modelos_texto" placeholder="Oi! Vi a {nome} no Google Maps e achei interessante...
----
-Olá! Passando para conhecer a {nome}, de {categoria}...">{{ modelos_texto }}</textarea>
+    <label>Suas variações
+      <span class="muted small" style="display:block;font-weight:400;margin-top:4px">
+        Separe cada variação com uma linha só com <span class="mono">---</span>.
+        Lembre de clicar em <strong>Salvar modelos</strong> antes de iniciar.
+      </span>
+      <textarea id="campo-modelos" name="modelos_texto" rows="12" placeholder="Escolha um template acima ou escreva o seu...">{{ modelos_texto }}</textarea>
     </label>
     <button class="btn btn-primary" type="submit">Salvar modelos</button>
   </form>
 
   {% if previas %}
   <h2 style="margin-top:20px">Prévia com leads reais</h2>
+  <p class="muted small">É exatamente o texto que sairia no WhatsApp (sorteio de variação incluso).</p>
   {% for p in previas %}
   <div class="previa"><strong>{{ p.nome }}</strong> · {{ p.telefone }}
 {{ p.texto }}</div>
@@ -59,12 +87,57 @@ Olá! Passando para conhecer a {nome}, de {categoria}...">{{ modelos_texto }}</t
   {% endif %}
 </section>
 
+{# ========== RITMO ========== #}
 <section class="card">
-  <h2>Ritmo</h2>
-  <p class="muted small">
-    O sistema avisa quando a configuração fica agressiva — não bloqueia.
-    Padrão seguro: intervalo 120–300s e teto sob aquecimento.
-  </p>
+  <h2>Ritmo (anti-ban)</h2>
+
+  <div class="help-box">
+    <strong>{{ expl_ritmo.titulo }}</strong>
+    {% for p in expl_ritmo.paragrafos %}
+    <p class="muted small">{{ p }}</p>
+    {% endfor %}
+    <p class="small" style="margin:10px 0 6px"><strong>Ciclo de cada envio</strong></p>
+    <ol class="help-list numbered">
+      {% for passo in expl_ritmo.passos %}
+      <li>{{ passo }}</li>
+      {% endfor %}
+    </ol>
+    <div class="example-40">
+      <strong>Exemplo com 40 lojas no padrão seguro</strong>
+      <p class="muted small" style="margin:6px 0 0">
+        Intervalo 2–5 min → as 40 levam cerca de <strong>2h a 3h30</strong> no mesmo dia útil,
+        se o teto diário for 40 e a conexão não estiver no aquecimento mais restrito.
+        Se o teto for 20/dia, vira ~2 dias (20 + 20). Fora do horário (ex.: depois das 18h),
+        para e continua no próximo dia — sem reenviar o que já saiu.
+      </p>
+    </div>
+  </div>
+
+  <p class="small" style="margin:16px 0 8px"><strong>Presets de ritmo</strong> — preenche o formulário; clique em Salvar ritmo:</p>
+  <div class="preset-grid">
+    {% for p in presets_ritmo %}
+    <div class="preset-card">
+      <strong>{{ p.titulo }}</strong>
+      <p class="muted small">{{ p.descricao }}</p>
+      <p class="muted small"><em>Quando usar:</em> {{ p.quando }}</p>
+      <p class="small mono-soft">
+        {{ p.teto_diario }}/dia · {{ p.intervalo_min_seg }}–{{ p.intervalo_max_seg }}s ·
+        {{ p.hora_inicio }}–{{ p.hora_fim }}
+        {% if p.dias_uteis_apenas %} · só úteis{% endif %}
+      </p>
+      <p class="small" style="color:var(--accent)">{{ p.resumo_40 }}</p>
+      <button type="button" class="btn btn-primary btn-sm js-aplicar-ritmo"
+        data-teto="{{ p.teto_diario }}"
+        data-imin="{{ p.intervalo_min_seg }}"
+        data-imax="{{ p.intervalo_max_seg }}"
+        data-hinicio="{{ p.hora_inicio }}"
+        data-hfim="{{ p.hora_fim }}"
+        data-uteis="{{ '1' if p.dias_uteis_apenas else '0' }}"
+        data-aquec="{{ '1' if p.respeitar_aquecimento else '0' }}"
+      >Usar este ritmo</button>
+    </div>
+    {% endfor %}
+  </div>
 
   {% if avisos_ritmo %}
   <div class="flash aviso">
@@ -72,32 +145,37 @@ Olá! Passando para conhecer a {nome}, de {categoria}...">{{ modelos_texto }}</t
   </div>
   {% endif %}
 
-  <form method="post" action="/campanhas/{{ campanha.id }}/ritmo">
+  <form method="post" action="/campanhas/{{ campanha.id }}/ritmo" id="form-ritmo">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <div class="grid-2">
       <label>Teto diário
-        <input type="number" name="teto_diario" min="1" value="{{ campanha.teto_diario }}">
+        <span class="field-hint">Máximo de mensagens por dia neste número</span>
+        <input type="number" name="teto_diario" id="ritmo-teto" min="1" value="{{ campanha.teto_diario }}">
       </label>
       <label>Intervalo mín. (s)
-        <input type="number" name="intervalo_min_seg" min="1" value="{{ campanha.intervalo_min_seg }}">
+        <span class="field-hint">Espera mínima entre um envio e o próximo</span>
+        <input type="number" name="intervalo_min_seg" id="ritmo-imin" min="1" value="{{ campanha.intervalo_min_seg }}">
       </label>
       <label>Intervalo máx. (s)
-        <input type="number" name="intervalo_max_seg" min="1" value="{{ campanha.intervalo_max_seg }}">
+        <span class="field-hint">Espera máxima (o sistema sorteia entre min e max)</span>
+        <input type="number" name="intervalo_max_seg" id="ritmo-imax" min="1" value="{{ campanha.intervalo_max_seg }}">
       </label>
       <label>Início
-        <input type="time" name="hora_inicio" value="{{ campanha.hora_inicio.strftime('%H:%M') }}">
+        <span class="field-hint">Horário de Brasília — antes disso não manda</span>
+        <input type="time" name="hora_inicio" id="ritmo-hinicio" value="{{ campanha.hora_inicio.strftime('%H:%M') }}">
       </label>
       <label>Fim
-        <input type="time" name="hora_fim" value="{{ campanha.hora_fim.strftime('%H:%M') }}">
+        <span class="field-hint">A partir daqui para; continua no próximo dia</span>
+        <input type="time" name="hora_fim" id="ritmo-hfim" value="{{ campanha.hora_fim.strftime('%H:%M') }}">
       </label>
     </div>
     <label class="check">
-      <input type="checkbox" name="dias_uteis_apenas" value="1" {% if campanha.dias_uteis_apenas %}checked{% endif %}>
-      Só dias úteis
+      <input type="checkbox" name="dias_uteis_apenas" id="ritmo-uteis" value="1" {% if campanha.dias_uteis_apenas %}checked{% endif %}>
+      Só dias úteis (pausa sábado e domingo)
     </label>
     <label class="check">
-      <input type="checkbox" name="respeitar_aquecimento" value="1" {% if campanha.respeitar_aquecimento %}checked{% endif %}>
-      Respeitar aquecimento da conexão
+      <input type="checkbox" name="respeitar_aquecimento" id="ritmo-aquec" value="1" {% if campanha.respeitar_aquecimento %}checked{% endif %}>
+      Respeitar aquecimento da conexão (recomendado nos primeiros 14 dias)
     </label>
     <div class="btn-row">
       <button class="btn btn-primary" type="submit">Salvar ritmo</button>
@@ -105,8 +183,20 @@ Olá! Passando para conhecer a {nome}, de {categoria}...">{{ modelos_texto }}</t
   </form>
 </section>
 
+{# ========== DISPARO ========== #}
 <section class="card" id="painel-disparo">
   <h2>Disparo</h2>
+
+  <div class="help-box compact">
+    <p class="muted small" style="margin:0">
+      Checklist: (1) WhatsApp <strong>conectado</strong> ·
+      (2) modelos <strong>salvos</strong> ·
+      (3) ritmo <strong>salvo</strong> ·
+      (4) dentro do horário configurado ·
+      (5) Docker/app no ar.
+      A <strong>primeira</strong> mensagem sai logo após iniciar; as seguintes esperam o intervalo.
+    </p>
+  </div>
 
   {% if campanha.conexao_id is none %}
   <p class="muted">Vincule um WhatsApp conectado antes de disparar.</p>
@@ -169,6 +259,36 @@ Olá! Passando para conhecer a {nome}, de {categoria}...">{{ modelos_texto }}</t
 
 <script>
 (() => {
+  // --- templates de mensagem ---
+  document.querySelectorAll('.js-aplicar-msg').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const ta = document.getElementById('campo-modelos');
+      const src = document.getElementById('preset-msg-' + btn.dataset.presetId);
+      if (!ta || !src) return;
+      ta.value = src.textContent || '';
+      ta.focus();
+      ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  });
+
+  // --- presets de ritmo ---
+  document.querySelectorAll('.js-aplicar-ritmo').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+      set('ritmo-teto', btn.dataset.teto);
+      set('ritmo-imin', btn.dataset.imin);
+      set('ritmo-imax', btn.dataset.imax);
+      set('ritmo-hinicio', btn.dataset.hinicio);
+      set('ritmo-hfim', btn.dataset.hfim);
+      const uteis = document.getElementById('ritmo-uteis');
+      const aquec = document.getElementById('ritmo-aquec');
+      if (uteis) uteis.checked = btn.dataset.uteis === '1';
+      if (aquec) aquec.checked = btn.dataset.aquec === '1';
+      document.getElementById('form-ritmo')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  });
+
+  // --- poll progresso ---
   const box = document.getElementById('stats-progresso');
   if (!box) return;
   const url = box.dataset.url;
@@ -192,9 +312,8 @@ Olá! Passando para conhecer a {nome}, de {categoria}...">{{ modelos_texto }}</t
       const motivo = document.getElementById('st-motivo');
       if (motivo) motivo.textContent = d.motivo_pausa || '';
       box.dataset.status = d.status;
-      // Para de poliar quando a campanha nao esta mais rodando.
       if (d.status !== 'rodando') return;
-    } catch (e) { /* rede local: tenta de novo */ }
+    } catch (e) { /* rede local */ }
     setTimeout(tick, 3000);
   };
   if (box.dataset.status === 'rodando') setTimeout(tick, 2000);

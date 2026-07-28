@@ -832,15 +832,27 @@ class Evolution:
             except httpx.TimeoutException as erro:
                 ultimo = ServicoIndisponivel(
                     "O servidor do WhatsApp demorou demais para responder. "
-                    "Verifique se a Evolution API esta no ar.",
+                    "Verifique se a Evolution API esta no ar "
+                    "(docker compose ps — o servico evolution-api precisa estar Up).",
                     detalhe=str(erro),
                 )
             except httpx.TransportError as erro:
-                ultimo = ServicoIndisponivel(
-                    "Nao foi possivel falar com o servidor do WhatsApp. "
-                    "Verifique a conexao e o endereco configurado.",
-                    detalhe=str(erro),
-                )
+                detalhe = str(erro)
+                # WinError 10061 / connection refused: Docker caiu ou compose nao subiu.
+                if "10061" in detalhe or "Connection refused" in detalhe or "actively refused" in detalhe:
+                    ultimo = ServicoIndisponivel(
+                        "Evolution API fora do ar (conexao recusada em "
+                        f"{self.base_url}). Abra o Docker Desktop, rode "
+                        "`docker compose up -d` e tente de novo. "
+                        "No Windows o Docker costuma cair sozinho e o QR para de funcionar.",
+                        detalhe=detalhe,
+                    )
+                else:
+                    ultimo = ServicoIndisponivel(
+                        "Nao foi possivel falar com o servidor do WhatsApp. "
+                        "Verifique a conexao e se o Docker/Evolution esta rodando.",
+                        detalhe=detalhe,
+                    )
             else:
                 if resposta.status_code >= 500:
                     ultimo = ServicoIndisponivel(

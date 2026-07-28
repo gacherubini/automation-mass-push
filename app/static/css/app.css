@@ -145,3 +145,48 @@ th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: u
   border: 1px dashed var(--border); border-radius: var(--radius);
   padding: 28px; text-align: center; color: var(--muted);
 }
+
+/* --- ajuda e presets da campanha --- */
+.help-box {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin: 0 0 16px;
+}
+.help-box.compact { padding: 12px 14px; }
+.help-box strong { display: block; margin-bottom: 6px; }
+.help-box p { margin: 0 0 8px; }
+.help-box p:last-child { margin-bottom: 0; }
+.help-list {
+  margin: 0; padding-left: 1.2rem; color: var(--muted); font-size: 0.88rem;
+}
+.help-list li { margin: 4px 0; }
+.help-list.numbered { list-style: decimal; }
+.example-40 {
+  margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.preset-card {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.preset-card strong { font-size: 0.95rem; }
+.preset-card .btn { margin-top: auto; align-self: flex-start; }
+.btn-sm { padding: 7px 12px; font-size: 0.85rem; }
+.field-hint {
+  display: block; font-weight: 400; font-size: 0.78rem;
+  color: var(--muted); margin: 2px 0 4px;
+}
+.mono-soft {
+  font-family: var(--mono); font-size: 0.78rem; color: var(--muted);
+}

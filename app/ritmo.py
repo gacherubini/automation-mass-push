@@ -21,6 +21,11 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass, replace
 from datetime import datetime, time
+from zoneinfo import ZoneInfo
+
+# A janela 9h-18h do usuario e no relogio local dele (Brasil), nao em UTC.
+# Sem isto, as 18h de Sao Paulo (21h UTC) a campanha ja teria parado 3h cedo.
+FUSO_PADRAO = ZoneInfo("America/Sao_Paulo")
 
 # Degraus de aquecimento: (dia_final, teto_diario). O primeiro degrau cujo
 # dia_final >= idade da conexao vence.
@@ -141,10 +146,22 @@ def teto_do_dia(perfil: Perfil, idade_conexao_dias: int) -> int:
     return min(perfil.teto_diario, limite_aquecimento)
 
 
+def _hora_local(agora: datetime) -> datetime:
+    """Converte `agora` para o fuso da operacao.
+
+    Datetime *naive* (sem tz) e tratado como ja local — e o que os testes
+    passam. Datetime *aware* (ex.: UTC do worker) e convertido para Sao Paulo.
+    """
+    if agora.tzinfo is None:
+        return agora
+    return agora.astimezone(FUSO_PADRAO)
+
+
 def dentro_da_janela(perfil: Perfil, agora: datetime) -> bool:
-    if perfil.dias_uteis_apenas and agora.weekday() >= 5:
+    local = _hora_local(agora)
+    if perfil.dias_uteis_apenas and local.weekday() >= 5:
         return False
-    return perfil.hora_inicio <= agora.time() < perfil.hora_fim
+    return perfil.hora_inicio <= local.time() < perfil.hora_fim
 
 
 def taxa_bloqueio(situacao: Situacao) -> float:

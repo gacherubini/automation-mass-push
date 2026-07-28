@@ -14,3 +14,6 @@ evolution_instances/
 postgres_data/
 .DS_Store
 Thumbs.db
+uvicorn.err.log
+uvicorn.out.log
+*.log

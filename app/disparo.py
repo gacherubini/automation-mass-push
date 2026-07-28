@@ -26,6 +26,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -33,6 +34,8 @@ from sqlalchemy.orm import Session
 from app import mensagem as mod_mensagem
 from app import ritmo
 from app import telefone as mod_telefone
+
+FUSO_OPERACAO = ZoneInfo("America/Sao_Paulo")
 from app.evolution import (
     Evolution,
     ErroEvolution,
@@ -89,7 +92,13 @@ class ResultadoPasso:
 
 
 def agora_utc() -> datetime:
+    """Mantido por compatibilidade; preferir `agora_local` no motor."""
     return datetime.now(timezone.utc)
+
+
+def agora_local() -> datetime:
+    """Relogio da operacao (Sao Paulo) — janela 9h-18h e 'hoje' usam isto."""
+    return datetime.now(FUSO_OPERACAO)
 
 
 def e_pedido_optout(texto: str) -> bool:
@@ -106,10 +115,14 @@ def montar_situacao(
 
     Duas campanhas no mesmo numero somam: o ban e o teto diario sao do chip.
     """
-    agora = agora or agora_utc()
+    agora = agora or agora_local()
     if agora.tzinfo is None:
-        agora = agora.replace(tzinfo=timezone.utc)
+        agora = agora.replace(tzinfo=FUSO_OPERACAO)
+    else:
+        agora = agora.astimezone(FUSO_OPERACAO)
 
+    # "Hoje" e meia-noite em Sao Paulo, nao em UTC (senao a meia-noite zera
+    # o contador as 21h no Brasil).
     inicio_dia = agora.replace(hour=0, minute=0, second=0, microsecond=0)
     inicio_hora = agora - timedelta(hours=1)
 
@@ -294,7 +307,7 @@ def processar_proximo(
     Quem chama decide dormir `espera_seg` e se continua o laço. Esta funcao
     nao dorme — assim o teste e deterministico.
     """
-    agora = agora or agora_utc()
+    agora = agora or agora_local()
     sessao.refresh(campanha)
 
     if campanha.status != StatusCampanha.RODANDO:
@@ -641,7 +654,7 @@ class GerenciadorDisparo:
         fabrica_evolution: Callable[[], Evolution],
         *,
         dormir: Callable[[float], None] = time.sleep,
-        relogio: Callable[[], datetime] = agora_utc,
+        relogio: Callable[[], datetime] = agora_local,
     ):
         self._fabrica_sessao = fabrica_sessao
         self._fabrica_evolution = fabrica_evolution
@@ -722,3 +735,26 @@ class GerenciadorDisparo:
             with self._lock:
                 self._threads.pop(campanha_id, None)
             logger.info("worker de disparo finalizado campanha=%s", campanha_id)
+
+
+def retomar_campanhas_rodando(
+    gerenciador: GerenciadorDisparo,
+    fabrica_sessao: Callable[[], Session],
+) -> list[int]:
+    """Sobe de novo o worker de toda campanha com status RODANDO.
+
+    O thread mora na memoria do processo: restart do uvicorn deixa a campanha
+    'rodando' no banco sem ninguem enviando. Chamar no startup fecha o buraco.
+    """
+    with fabrica_sessao() as sessao:
+        ids = list(
+            sessao.scalars(
+                select(Campanha.id).where(Campanha.status == StatusCampanha.RODANDO)
+            ).all()
+        )
+    retomadas: list[int] = []
+    for cid in ids:
+        if gerenciador.iniciar(cid):
+            retomadas.append(cid)
+            logger.info("retomou worker da campanha=%s no startup", cid)
+    return retomadas

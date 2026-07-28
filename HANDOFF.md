@@ -5,8 +5,46 @@ projeto do zero, **leia este arquivo inteiro antes de escrever qualquer linha**.
 Ele existe para você não re-decidir o que já foi decidido nem repetir erro já
 cometido.
 
-Última atualização: 2026-07-27 (Fase 1 de código fechada; falta só disparo real
-manual).
+Última atualização: 2026-07-28 — sessão encerrada pelo dono. Fase 1 utilizável
+localmente; um envio real chegou a ser entregue. Próximo passo é estabilizar o
+uso diário (Docker/app) e só depois Fase 2.
+
+---
+
+## 0. Estado ao parar (leia primeiro)
+
+**O que está pronto e no `main`:** núcleo puro, planilha, mensagem, models,
+Alembic, docker-compose, cliente Evolution, auth, dashboard, motor de disparo,
+webhook, presets de ritmo/mensagem na UI, `start-local.ps1`.
+
+**Prova de envio real (nesta máquina):**
+
+- WhatsApp conectado via QR (Evolution)
+- Campanha com 1 lead enviou `oiiiiiiiiiiii` para `5519998469808`
+- `Mensagem.status_entrega = entregue`, `id_externo` preenchido
+- Lead foi a `respondeu` depois
+
+**O que ainda dói no dia a dia (Windows):**
+
+1. **Docker Desktop cai sozinho** → Evolution some → QR e disparo “quebram”
+2. **uvicorn some** se o processo background morre → `127.0.0.1 refused`
+3. Campanha `rodando` no banco **sem worker** se o app reiniciou (corrigido com
+   `retomar_campanhas_rodando` no lifespan — validar em uso real)
+
+**Como subir de novo:**
+
+```powershell
+cd C:\Users\guilh\Documents\codigo\automation-mass-push
+powershell -ExecutionPolicy Bypass -File .\start-local.ps1
+# ou: Docker Desktop aberto + docker compose up -d
+#     .\.venv\Scripts\python -m alembic upgrade head
+#     .\.venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Dashboard: http://127.0.0.1:8000  
+Evolution: http://localhost:8080  
+
+`.env` local (não versionado): precisa de `SECRET_KEY` e `EVOLUTION_API_KEY`.
 
 ---
 
@@ -53,118 +91,52 @@ python -m pytest tests/ -q
 ### Núcleo de decisão (funções puras, sem banco nem rede)
 
 - [x] `app/telefone.py` — normalização BR → E.164
-  - [x] aceita qualquer pontuação, DDI, zero do DDD
-  - [x] classifica celular / fixo / inválido
-  - [x] valida DDD contra a lista real
-  - [x] variantes do nono dígito
-  - [x] normalização estável, para deduplicação funcionar
 - [x] `app/ritmo.py` — política anti-ban
-  - [x] aquecimento por idade da conexão
-  - [x] teto diário e teto horário
-  - [x] janela de horário comercial e dias úteis
-  - [x] intervalo aleatório com `random.Random` injetável
-  - [x] freio de reputação por bloqueio (>2%) e resposta (<15%)
-  - [x] amostra mínima antes de acionar o freio
-  - [x] avisos de configuração agressiva, sem bloquear o usuário
-  - [x] invariantes do padrão travadas por teste (sob 30/h, sem rajada, cabe na janela)
+  - [x] janela usa fuso **America/Sao_Paulo** quando o datetime é aware (UTC do
+        worker não descola 9h–18h do usuário)
 - [x] `app/planilha.py` — import do `.xlsx` do scraper
-  - [x] mapeia colunas pelo cabeçalho, tolerante a acento/caixa/ordem
-  - [x] erro claro quando falta coluna essencial
-  - [x] descarta fixo e inválido, contando cada motivo
-  - [x] deduplica dentro da própria planilha
-  - [x] relatório de importação para a tela
-  - [x] aceita caminho e file-like (upload)
-  - [x] invariante travada por teste: `total = sem_telefone + invalidos +
-        duplicados + fixos + prontos`. Toda linha cai em exatamente um balde,
-        senão o usuário não consegue explicar as lojas que sumiram entre o
-        arquivo e a fila
 - [x] `app/mensagem.py` — modelo com lacunas
-  - [x] lacunas `{nome}` `{categoria}` `{endereco}` `{busca}`
-  - [x] múltiplas variações, sorteadas por lead
-  - [x] validação do modelo antes do disparo, com erro claro
-  - [x] tratamento de lacuna sem valor (nunca sai "None" nem chave crua)
-  - [x] prévia preenchida com leads reais
-  - [x] medida de diversidade, para avisar quando há variações de menos
 
 ### Infraestrutura
 
-- [x] `app/config.py` — configuração por variável de ambiente, sem segredo no código
-  - [x] defaults locais, string vazia = ausente, avisos em produção
-  - [x] testes em `tests/test_config.py`
-- [x] `app/db.py` — engine, sessionmaker, dependência FastAPI
-- [x] `app/models.py` — as 7 entidades
-  - [x] `Usuario`
-  - [x] `Conexao` (instância WhatsApp; `conectada_em` alimenta o aquecimento)
-  - [x] `Campanha` (guarda o Perfil de ritmo e os modelos de mensagem)
-  - [x] `Lead`
-  - [x] `Mensagem` (texto realmente enviado, id externo)
-  - [x] `OptOut` (global por usuário, unique)
-  - [x] `JaContatado` (global por usuário, unique; `campanha_id` SET NULL)
-  - [x] índices nas consultas quentes
-  - [x] testes em SQLite em `tests/test_models.py`
-- [x] `alembic/` + primeira migração (`329d0dfb5ad1`)
-- [x] `docker-compose.yml` — app (profile) + Postgres + Evolution API, com volumes
-- [x] `.env.example` documentado
-- [x] `Dockerfile` do app
+- [x] `app/config.py` — env + **carrega `.env` da raiz** (sem isso alembic/uvicorn
+      usavam senha default e o Postgres do compose recusava)
+- [x] `app/db.py`, `app/models.py`, Alembic, `Dockerfile`
+- [x] `docker-compose.yml` — Postgres + Evolution (`evoapicloud/evolution-api:latest`)
+  - [x] `extra_hosts: host.docker.internal:host-gateway` (webhook no host)
+  - [x] `CONFIG_SESSION_PHONE_*` documentado no `.env.example`
+- [x] `start-local.ps1` — sobe Docker + migrate + uvicorn
 
 ### Integração com o WhatsApp
 
-- [x] `app/evolution.py` — cliente HTTP
-  - [x] criar instância
-  - [x] obter QR code
-  - [x] consultar estado da conexão e número conectado
-  - [x] desconectar
-  - [x] checar se número tem WhatsApp (em lote, partido em 50)
-  - [x] enviar mensagem de texto
-  - [x] interpretar payload de webhook, ignorando `fromMe`
-  - [x] exceções próprias com mensagem útil em português
-  - [x] retry só em operação segura — **nunca** em envio
-  - [x] testes com `httpx.MockTransport`, sem rede (`tests/test_evolution.py`)
+- [x] `app/evolution.py`
+  - [x] `obter_qrcode` com **retry** quando a API devolve `{"count":0}`
+  - [x] mensagens claras se Evolution estiver offline (connection refused)
+- [x] Imagem Docker: **não** usar `atendai/evolution-api` (sumiu do Hub) —
+      usar `evoapicloud/evolution-api`
 
 ### Dashboard
 
-- [x] `app/auth.py` — argon2 + sessão assinada com `itsdangerous`
-  - [x] hash/verify, login, sessao, CSRF
-  - [x] testes em `tests/test_auth.py`
-- [x] `app/main.py` — rotas (login, bootstrap, home, conexão, campanhas, leads, opt-outs)
-  - [x] testes de rota em `tests/test_main.py` (TestClient + SQLite)
-- [x] Tela de login (+ bootstrap do primeiro usuário)
-- [x] Tela de conexão com QR code — **com o aviso de risco de ban do número**
-- [x] Tela de nova campanha: upload do `.xlsx` + relatório de importação
-- [x] Editor de mensagem com prévia preenchida
-- [x] Tela de configuração de ritmo, com os avisos de `Perfil.avisos()`
-- [x] Acompanhamento do disparo ao vivo (poll JSON a cada 3s enquanto `rodando`)
-- [x] Lista de leads com status e filtro
-- [x] Tela de opt-outs + exportação CSV (`/optouts.csv`)
+- [x] auth, login, bootstrap, home, conexão (QR + aviso de ban)
+- [x] campanha: upload, modelos, ritmo, leads, opt-outs CSV
+- [x] progresso ao vivo (poll JSON)
+- [x] **presets** de mensagem e ritmo + textos de ajuda na campanha
+      (`app/templates_presets.py` + `campanhas/detalhe.html`)
+- [x] conexão: poll de status, botão **Recomeçar do zero**
 
 ### Motor de disparo
 
-- [x] `app/disparo.py`
-  - [x] laço que consulta `ritmo.avaliar()` antes de cada envio
-  - [x] pausa a campanha e grava `motivo_pausa` quando `freio_permanente`
-  - [x] dorme `ritmo.proximo_intervalo()` entre envios (worker em thread)
-  - [x] checa WhatsApp antes de enviar, testando as variantes do nono dígito
-  - [x] grava em `JaContatado`, nunca repetindo entre campanhas
-  - [x] respeita `OptOut` sempre
-  - [x] registra falha sem reenviar
-  - [x] retomar campanha pausada sem duplicar o que já saiu
-  - [x] testes em `tests/test_disparo.py`
-- [x] Webhook de resposta (`POST /webhook/evolution`)
-  - [x] marca o lead como *Respondeu*
-  - [x] detecta pedido de opt-out e grava em `OptOut`
-  - [x] alimenta as contagens que o freio de reputação usa (entrega sobe para
-        entregue quando há resposta; updates de status quando a Evolution manda)
-  - [x] teste de rota em `tests/test_main.py`
+- [x] `app/disparo.py` — laço, freio, WA check, JaContatado, OptOut, sem retry de envio
+- [x] worker em thread; **`retomar_campanhas_rodando` no startup** do FastAPI
+- [x] webhook `/webhook/evolution` (resposta, opt-out, connection.update, entrega)
 
 ### Fechamento da Fase 1
 
-- [x] Caminho ponta a ponta coberto por testes com mocks (Evolution MockTransport
-      + motor + webhook + UI). Subir Docker de verdade e escanear QR é checklist
-      manual — ver README §6 e §7.
-- [ ] Um disparo real, de baixo volume, para números conhecidos (**manual**, no
-      número do dono — não automatizável sem WhatsApp real)
-- [x] README com instruções de instalação para os amigos
-- [x] Checklist deste documento revisado e atualizado
+- [x] Testes automatizados (suite ~200+; rodar `pytest tests/ -q`)
+- [x] Um disparo real de baixo volume chegou a **entregue** (ver §0)
+- [x] README + este HANDOFF atualizados
+- [ ] Uso estável no dia a dia (Docker Desktop no Windows ainda é o elo fraco)
+- [ ] Volume real (dezenas de lojas) com acompanhamento humano
 
 ### Fase 2 — decidida para depois, não comece sem combinar
 
@@ -189,18 +161,20 @@ conversa são módulos separados, e a Fase 1 apenas registra "este lead
 respondeu".
 
 **A primeira mensagem é escrita pelo usuário**, não gerada por IA. Modelo com
-lacunas, com várias variações que o sistema sorteia.
+lacunas, com várias variações que o sistema sorteia. Templates na UI são
+atalhos, não substituem o texto do usuário.
 
 **Roda local primeiro** (Docker na máquina do dono), nuvem depois. Limitação
 aceita: com o PC desligado, o WhatsApp desconecta.
 
 **Os controles de ritmo ficam expostos na tela**, com padrão conservador e
 aviso quando o usuário passa dos limites da pesquisa. O sistema avisa, não
-bloqueia.
+bloqueia. Presets (teste / padrão / conservador / espalhado) só preenchem o
+form — o usuário ainda salva.
 
-**Nada de rotação de proxy/IP nem re-registro de número banido.** Isso é driblar
-a punição, não ser um remetente melhor, e não funciona de forma confiável.
-Decisão consciente, não esquecimento.
+**Nada de rotação de proxy/IP nem re-registro de número banido.**
+
+**Commits sem `Co-Authored-By`.**
 
 ---
 
@@ -213,108 +187,81 @@ retry. A issue que pedia exatamente esses recursos foi
 
 Ou seja: **o controle de ritmo não é um detalhe, é o produto.**
 
-Números que guiam o sistema (fontes no README):
-
 | Limite | Valor |
 |---|---|
-| Teto por hora | < 30 mensagens (acima de 60/h dispara fiscalização) |
+| Teto por hora | < 30 mensagens |
 | Aquecimento dias 1-3 / 4-7 / 8-14 | 50 / 100 / 200 por dia |
 | Conta madura | < 200/dia |
-| Taxa de bloqueio | > 2% derruba a reputação |
-| Taxa de resposta | < 15% é zona de perigo |
-| Texto idêntico | no máximo ~15 destinatários por hora |
+| Taxa de bloqueio | > 2% |
+| Taxa de resposta | < 15% |
+| Texto idêntico | máx. ~15 destinatários/hora |
 
-**Armadilha já pisada:** as fontes se contradizem. Várias recomendam "~1
-mensagem por minuto", o que dá 60/hora e estoura o próprio teto de 30/hora que
-elas indicam. O teto horário vence, porque é o que a fiscalização observa. O
-padrão do `Perfil` usa intervalo de **120-300s**, e há teste travando três
-invariantes: o pior caso fica sob 30/h, a cota diária não sai em menos de uma
-hora (rajada), e ainda cabe na janela comercial. **Se você mexer no intervalo
-padrão, esses testes vão te avisar. Ouça-os.**
+Padrão: intervalo **120–300s**. Janela 9h–18h em **horário de Brasília**.
+
+**Exemplo 40 lojas (padrão seguro):** ~2h–3h30 no mesmo dia útil se teto 40 e
+aquecimento permitir. Conservador (20/dia) = ~2 dias.
 
 ---
 
 ## 5. Convenções de código
 
-Siga o que já está em `app/telefone.py` e `app/ritmo.py`:
+Siga o que já está em `app/telefone.py`, `app/ritmo.py`, `app/disparo.py`:
 
 - Nomes, docstrings e comentários **em português**; identificadores **sem
-  acento** (`normalizar`, `situacao`, `enviadas_hoje`)
-- Comentários explicam o **porquê**, não o quê. Densidade moderada
-- Funções puras onde der: sem I/O escondido, sem relógio global — **a hora entra
-  como parâmetro**, que é o que torna janela e freio testáveis
+  acento**
+- Funções puras onde der; hora como parâmetro (testável)
 - `dataclass(frozen=True)` para resultados
-- Aleatoriedade recebe um `random.Random` opcional, para o teste ser
-  determinístico (ver `ritmo.proximo_intervalo`)
-- SQLAlchemy 2 moderno: `DeclarativeBase`, `Mapped[...]`, `mapped_column(...)`
-- Testes: classes agrupando por comportamento, nomes descritivos em português
-- **Dados de teste realistas.** Use telefones e lojas de verdade capturados do
-  Maps — foi assim que o descarte de telefone fixo virou um teste honesto:
-
-  ```
-  Bicho Mania          (51) 99898-4086   celular
-  Agropet Tipo Bicho   (51) 99858-1025   celular
-  CaoTelli             (51) 99765-5755   celular
-  Petz Canoas          (51) 3052-0478    FIXO  -> descartar
-  Clinica Dra. Daoia   (51) 3466-0454    FIXO  -> descartar
-  ```
+- SQLAlchemy 2: `Mapped[...]`, `mapped_column(...)`
+- Testes: classes por comportamento, dados realistas (telefones de Canoas)
 
 ### Git
 
-Commits **sem** a linha `Co-Authored-By` — o dono do projeto pediu
-explicitamente que não apareça atribuição a IA. Mensagens de commit em
-português, explicando a motivação, não o diff.
+Mensagens em português, motivação no corpo. Sem `Co-Authored-By`.
 
 ---
 
-## 6. Próximos passos, em ordem
+## 6. Próximos passos (quando retomar)
 
-A lista granular está na [seção 2](#2-checklist). Aqui fica só a **ordem** em
-que atacar, porque cada passo destrava o seguinte.
+1. **Rotina estável no Windows:** sempre `start-local.ps1` ou Docker Desktop
+   aberto + uvicorn em janela própria (não depender de processo de agente).
+2. **Validar retomar worker** após kill do uvicorn: campanha `rodando` deve
+   voltar a enviar sozinha no startup.
+3. **Campanha de volume baixo real** (5–10 lojas conhecidas) com preset
+   conservador, acompanhar entrega/resposta/opt-out.
+4. Só então **Fase 2** (IA / nuvem).
 
-1. ~~**Integrar o que os três agentes paralelos entregaram**~~ — feito. Núcleo
-   (planilha/mensagem) já estava no `main`; infra + Evolution foram revisados,
-   testados (181 testes no total) e commitados. Dockerfile e compose com
-   profile `app` incluídos.
-2. ~~**`app/auth.py`**~~ — feito.
-3. ~~**`app/main.py` + templates**~~ — feito (inclui progresso ao vivo).
-4. ~~**`app/disparo.py`**~~ — feito (worker em thread, freio, opt-out,
-   ja-contatado, sem retry de envio).
-5. ~~**Webhook de resposta**~~ — feito (`/webhook/evolution`).
-6. **Disparo real de baixo volume** — manual no número do dono (README).
-7. Só então pensar na Fase 2 (IA).
+Não reabrir: infra, models, cliente Evolution, motor, UI base.
 
 ---
 
 ## 7. Armadilhas conhecidas
 
-- **Telefone fixo.** Boa parte do que o scraper captura é fixo e não tem
-  WhatsApp. Mandar para número inexistente é sinal de spam. `telefone.py` já
-  classifica; o motor de disparo **precisa** honrar `provavel_whatsapp`.
-- **Nono dígito.** Contas anteriores a 2012 podem estar sem o `9`. Não dá para
-  adivinhar: `telefone.variantes()` devolve os candidatos e quem decide é a
-  checagem online da Evolution.
-- **Nunca fazer retry de envio de mensagem.** Um timeout pode significar que a
-  mensagem foi entregue. Reenviar duplica para o lead, o que é pior que uma
-  falha visível e conta como spam. Retry só em operação segura (consultar
-  status, obter QR).
-- **Freio de reputação com amostra pequena.** 1 bloqueio em 5 envios dá 20%, mas
-  não significa nada. `ritmo.AMOSTRA_MINIMA_PARA_FREIO` existe por isso.
-- **Lacuna sem valor não pode virar buraco.** Loja sem categoria na planilha
-  geraria `"Vi a Bicho Mania, de , no Maps"` — espaço duplo e artigo solto
-  denunciam o molde na hora. `mensagem.SUBSTITUTOS` troca por um termo neutro
-  ("sua loja", "o seu segmento"). O texto sai mais genérico, mas inteiro.
-  Efeito colateral aceito: `"de {categoria}"` vira `"de o seu segmento"` em vez
-  de `"do seu segmento"`. Contrair exigiria analisar a preposição anterior; o
-  usuário vê o resultado na prévia antes de disparar.
-- **`{telefone}` e `{link}` não são lacunas válidas, de propósito.** Mostrar
-  para a loja que você já tem o número dela soa invasivo.
-- **Célula de telefone pode vir como número.** Telefone digitado sem máscara no
-  Excel volta como `float` e viraria `"51998581025.0"`. `planilha._texto()`
-  cuida disso, e há teste.
-- **Extensão Chrome do projeto irmão não recarrega sozinha.** Irrelevante aqui,
-  mas se você for mexer no scraper: depois de alterar arquivos é preciso clicar
-  em recarregar em `chrome://extensions` **e** dar F5 na página.
+- **Docker Desktop no Windows morre sem aviso.** Sintoma: QR vazio, “connection
+  refused”, dashboard ok mas Evolution morta (ou os dois). Abrir Docker e
+  `docker compose up -d`.
+- **Imagem Evolution:** `evoapicloud/evolution-api:latest` (v2.3.x). A antiga
+  `atendai/evolution-api` não puxa mais. v2.2.3 gerava QR `count:0` com Baileys
+  desatualizado.
+- **QR `count:0`:** retry no `obter_qrcode`; não criar instância nova a cada
+  falha (gerava dezenas de órfãs e o Baileys entrava em loop). Botão
+  “Recomeçar do zero” apaga e recria uma.
+- **Modelo na caixa ≠ modelo salvo.** Sem “Salvar modelos”, Iniciar fica
+  bloqueado (“Salve pelo menos um modelo”).
+- **Worker some com o processo.** Status `rodando` no banco não garante thread
+  viva. Lifespan chama `retomar_campanhas_rodando`.
+- **Janela de horário em SP.** Datetime UTC do servidor convertido em
+  `America/Sao_Paulo` em `ritmo.dentro_da_janela` / contadores do dia.
+- **Telefone fixo / nono dígito / sem retry de envio / freio com amostra
+  mínima / lacunas / float do Excel** — ver também README e §7 histórico:
+  - fixo → descartar (`provavel_whatsapp`)
+  - nono dígito → `telefone.variantes` + checagem Evolution
+  - timeout de envio → falha, **não** reenvia
+  - freio só com amostra ≥ 20
+  - lacuna vazia → `SUBSTITUTOS`, não buraco
+  - `{telefone}`/`{link}` proibidos
+  - Excel float → `planilha._texto()`
+- **Webhook** precisa alcançar o app (`WEBHOOK_GLOBAL_URL` com
+  `host.docker.internal` se uvicorn está no host).
 
 ---
 
@@ -328,3 +275,22 @@ está aqui reduz risco; não elimina.
 A alavanca mais forte não é técnica: é mandar menos, para quem tem chance real
 de se interessar, e sumir na primeira negativa. Isso deve continuar visível na
 interface, não escondido na documentação.
+
+---
+
+## 9. Mapa rápido de arquivos
+
+```
+app/
+  telefone.py ritmo.py planilha.py mensagem.py
+  config.py db.py models.py
+  evolution.py auth.py disparo.py
+  templates_presets.py   # textos da UI (mensagem + ritmo)
+  main.py                # FastAPI + lifespan retoma workers
+  templates/ campanhas/detalhe.html  # presets + ajuda
+  templates/ conexao.html            # QR + poll + recomeçar
+start-local.ps1
+docker-compose.yml
+HANDOFF.md README.md
+tests/
+```

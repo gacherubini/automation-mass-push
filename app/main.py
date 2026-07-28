@@ -12,6 +12,7 @@ import logging
 import re
 import secrets
 from collections.abc import Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -38,7 +39,13 @@ from app.auth import (
 )
 from app.config import configuracao
 from app.db import fabrica_de_sessao, get_sessao
-from app.disparo import GerenciadorDisparo
+from app.disparo import GerenciadorDisparo, retomar_campanhas_rodando
+from app.templates_presets import (
+    EXPLICACAO_MENSAGEM,
+    EXPLICACAO_RITMO,
+    PRESETS_MENSAGEM,
+    PRESETS_RITMO,
+)
 from app.evolution import (
     CONECTADA,
     Evolution,
@@ -72,10 +79,43 @@ def criar_app(
     *,
     fabrica_evolution: Callable[[], Evolution] | None = None,
     gerenciador_disparo: GerenciadorDisparo | None = None,
+    retomar_no_startup: bool = True,
 ) -> FastAPI:
     """Monta a aplicacao. Fabricas injetaveis existem para o teste."""
     cfg = configuracao()
-    app = FastAPI(title="Prospeccao WhatsApp", docs_url=None, redoc_url=None)
+
+    def _evolution() -> Evolution:
+        if fabrica_evolution is not None:
+            return fabrica_evolution()
+        atual = configuracao()
+        return Evolution(atual.evolution_url, atual.evolution_api_key)
+
+    if gerenciador_disparo is None:
+        gerenciador_disparo = GerenciadorDisparo(
+            fabrica_sessao=lambda: fabrica_de_sessao()(),
+            fabrica_evolution=_evolution,
+        )
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # Thread do worker some no restart do uvicorn; campanhas RODANDO no
+        # banco precisam de alguem mandando de novo.
+        if retomar_no_startup:
+            try:
+                retomar_campanhas_rodando(
+                    app.state.disparo,  # type: ignore[attr-defined]
+                    lambda: fabrica_de_sessao()(),
+                )
+            except Exception:
+                logger.exception("falha ao retomar campanhas no startup")
+        yield
+
+    app = FastAPI(
+        title="Prospeccao WhatsApp",
+        docs_url=None,
+        redoc_url=None,
+        lifespan=lifespan,
+    )
 
     # https_only=False: roda local em http. SameSite=lax cobre o CSRF basico
     # junto com o token do form.
@@ -92,19 +132,7 @@ def criar_app(
     if static_dir.is_dir():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-    def _evolution() -> Evolution:
-        if fabrica_evolution is not None:
-            return fabrica_evolution()
-        atual = configuracao()
-        return Evolution(atual.evolution_url, atual.evolution_api_key)
-
     app.state.fabrica_evolution = _evolution  # type: ignore[attr-defined]
-
-    if gerenciador_disparo is None:
-        gerenciador_disparo = GerenciadorDisparo(
-            fabrica_sessao=lambda: fabrica_de_sessao()(),
-            fabrica_evolution=_evolution,
-        )
     app.state.disparo = gerenciador_disparo  # type: ignore[attr-defined]
 
     # -- helpers de request -------------------------------------------------
@@ -313,7 +341,13 @@ def criar_app(
                         _sincronizar_conexao(sessao, conexao, estado_api)
                     elif conexao.status != StatusConexao.CONECTADA:
                         try:
-                            qr = evo.obter_qrcode(conexao.nome_instancia)
+                            # Poucas tentativas na tela: o botao "Gerar QR" ja
+                            # fez o trabalho pesado; aqui so atualiza a imagem.
+                            qr = evo.obter_qrcode(
+                                conexao.nome_instancia,
+                                tentativas=3,
+                                espera_entre=1.5,
+                            )
                             qr_data_uri = qr.imagem
                             conexao.status = StatusConexao.AGUARDANDO_QR
                             sessao.commit()
@@ -335,6 +369,52 @@ def criar_app(
                 erro_evolution=erro_evolution,
                 estado_api=estado_api,
             ),
+        )
+
+    @app.get("/conexao/status")
+    def conexao_status(
+        sessao: Session = Depends(get_sessao),
+        usuario: Usuario = Depends(_exigir_usuario),
+    ) -> Response:
+        """JSON para o poll da tela de QR (detecta pareamento sem F5)."""
+        conexao = sessao.scalar(
+            select(Conexao)
+            .where(Conexao.usuario_id == usuario.id)
+            .order_by(Conexao.id.desc())
+            .limit(1)
+        )
+        if conexao is None:
+            return JSONResponse({"existe": False})
+
+        estado = conexao.status.value
+        numero = conexao.numero or ""
+        try:
+            with app.state.fabrica_evolution() as evo:  # type: ignore[attr-defined]
+                api = evo.estado_conexao(conexao.nome_instancia)
+                if api.estado == CONECTADA:
+                    _sincronizar_conexao(sessao, conexao, api)
+                    estado = StatusConexao.CONECTADA.value
+                    numero = conexao.numero or api.numero or ""
+                else:
+                    estado = api.estado
+        except ErroEvolution as erro:
+            return JSONResponse(
+                {
+                    "existe": True,
+                    "status": estado,
+                    "numero": numero,
+                    "erro": erro.mensagem,
+                }
+            )
+
+        return JSONResponse(
+            {
+                "existe": True,
+                "status": estado,
+                "numero": numero,
+                "conectada": estado == StatusConexao.CONECTADA.value,
+                "instancia": conexao.nome_instancia,
+            }
         )
 
     @app.post("/conexao/criar")
@@ -444,6 +524,61 @@ def criar_app(
         # o aquecimento (ver docstring de Conexao).
         sessao.commit()
         _flash(request, "ok", "WhatsApp desconectado.")
+        return RedirectResponse("/conexao", status_code=303)
+
+    @app.post("/conexao/recriar")
+    def conexao_recriar(
+        request: Request,
+        csrf: Annotated[str, Form()] = "",
+        sessao: Session = Depends(get_sessao),
+        usuario: Usuario = Depends(_exigir_usuario),
+    ) -> Response:
+        """Apaga a instancia na Evolution e no banco e cria uma nova limpa.
+
+        Use quando o QR nao parea (celular recusa, count trava, Docker reiniciou
+        no meio). Nao zera conectada_em de campanhas antigas — so a conexao.
+        """
+        bloqueio = _csrf_ou_volta(request, csrf, "/conexao")
+        if bloqueio:
+            return bloqueio
+
+        conexao = sessao.scalar(
+            select(Conexao)
+            .where(Conexao.usuario_id == usuario.id)
+            .order_by(Conexao.id.desc())
+            .limit(1)
+        )
+        try:
+            with app.state.fabrica_evolution() as evo:  # type: ignore[attr-defined]
+                if conexao is not None:
+                    try:
+                        evo.remover_instancia(conexao.nome_instancia)
+                    except ErroEvolution:
+                        pass
+                    sessao.delete(conexao)
+                    sessao.commit()
+
+                nome = _nome_instancia(usuario)
+                inst = evo.criar_instancia(nome)
+                nova = Conexao(
+                    usuario_id=usuario.id,
+                    nome_instancia=nome,
+                    status=StatusConexao.AGUARDANDO_QR,
+                )
+                sessao.add(nova)
+                sessao.commit()
+                if inst.qrcode is None or inst.qrcode.vazio:
+                    evo.obter_qrcode(nome, tentativas=4, espera_entre=1.5)
+        except ErroEvolution as erro:
+            sessao.rollback()
+            _flash(request, "erro", erro.mensagem)
+            return RedirectResponse("/conexao", status_code=303)
+
+        _flash(
+            request,
+            "ok",
+            "Conexao recriada do zero. Escaneie o QR novo agora (ele expira em ~40s).",
+        )
         return RedirectResponse("/conexao", status_code=303)
 
     # -- campanhas ----------------------------------------------------------
@@ -613,6 +748,10 @@ def criar_app(
                 motivo_inicio=motivo_inicio,
                 conexoes=conexoes,
                 worker_ativo=worker_ativo,
+                presets_mensagem=PRESETS_MENSAGEM,
+                presets_ritmo=PRESETS_RITMO,
+                expl_msg=EXPLICACAO_MENSAGEM,
+                expl_ritmo=EXPLICACAO_RITMO,
             ),
         )
 
@@ -916,8 +1055,35 @@ def criar_app(
             )
             return JSONResponse({"ok": True, "tipo": "resposta"})
 
-        # Atualizacao de entrega / bloqueio, quando o payload carrega key.id.
         evento = str(payload.get("event") or "").lower().replace("_", ".").replace("-", ".")
+
+        # Pareamento do QR: Evolution avisa connection.update com state=open.
+        if "connection.update" in evento:
+            instancia = str(payload.get("instance") or "")
+            data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+            estado_bruto = str(data.get("state") or data.get("status") or "").lower()
+            if not estado_bruto and isinstance(data.get("instance"), dict):
+                estado_bruto = str(data["instance"].get("state") or "").lower()
+            if instancia and estado_bruto in {"open", "conectada", "connected"}:
+                conexao = sessao.scalar(
+                    select(Conexao).where(Conexao.nome_instancia == instancia)
+                )
+                if conexao is not None:
+                    # Puxa numero/perfil com uma consulta dedicada.
+                    try:
+                        with app.state.fabrica_evolution() as evo:  # type: ignore[attr-defined]
+                            api = evo.estado_conexao(instancia)
+                            _sincronizar_conexao(sessao, conexao, api)
+                    except ErroEvolution:
+                        conexao.status = StatusConexao.CONECTADA
+                        if conexao.conectada_em is None:
+                            from datetime import datetime, timezone
+
+                            conexao.conectada_em = datetime.now(timezone.utc)
+                        sessao.commit()
+                return JSONResponse({"ok": True, "tipo": "conexao"})
+
+        # Atualizacao de entrega / bloqueio, quando o payload carrega key.id.
         if "messages.update" in evento or "send.message" in evento:
             data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
             chave = data.get("key") if isinstance(data.get("key"), dict) else {}
