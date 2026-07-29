@@ -3,6 +3,7 @@ import random
 import pytest
 
 from app import mensagem
+from app.templates_presets import MODELOS_IA_PEQUENOS_NEGOCIOS
 from app.planilha import Lead
 
 BICHO_MANIA = Lead(
@@ -195,6 +196,16 @@ class TestSorteioDeVariacao:
         assert escolha.indice >= 1
         assert escolha.modelo == MODELOS[escolha.indice - 1]
         assert "Bicho Mania" in escolha.texto
+
+
+class TestModeloPadraoIA:
+    def test_variacoes_sao_validas_curtas_e_com_uma_pergunta(self):
+        mensagem.validar(MODELOS_IA_PEQUENOS_NEGOCIOS)
+        assert len(MODELOS_IA_PEQUENOS_NEGOCIOS) == 4
+        for modelo in MODELOS_IA_PEQUENOS_NEGOCIOS:
+            assert "automações de IA" in modelo
+            assert len(modelo) <= 450
+            assert modelo.count("?") == 1
 
 
 class TestPrevia:

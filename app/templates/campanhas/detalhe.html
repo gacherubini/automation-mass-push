@@ -26,11 +26,32 @@
   <a class="btn" href="/campanhas/{{ campanha.id }}/leads">Ver leads</a>
 </p>
 
-{# ========== MENSAGENS ========== #}
-<section class="card">
-  <h2>Modelos de mensagem</h2>
+<nav class="campaign-steps" aria-label="Etapas da campanha">
+  <a href="#mensagem-inicial"><span>1</span> Mensagem</a>
+  <a href="#ia-conversa"><span>2</span> Respostas com IA</a>
+  <a href="#ritmo"><span>3</span> Ritmo</a>
+  <a href="#painel-disparo"><span>4</span> Iniciar</a>
+  <a href="#resultados-variacoes">Resultados</a>
+</nav>
 
-  <div class="help-box">
+{# ========== MENSAGENS ========== #}
+<section class="card" id="mensagem-inicial">
+  <h2>1. Mensagem inicial</h2>
+  <p class="muted small">O modelo recomendado já vem salvo em campanhas novas.</p>
+
+  {% set recomendado = presets_mensagem[0] %}
+  <div class="recommended-preset">
+    <div>
+      <strong>{{ recomendado.titulo }}</strong>
+      <p class="muted small">{{ recomendado.descricao }}</p>
+    </div>
+    <button type="button" class="btn btn-primary btn-sm js-aplicar-msg"
+            data-preset-id="{{ recomendado.id }}">Usar recomendado</button>
+  </div>
+
+  <details class="compact-details">
+    <summary>Como editar a mensagem</summary>
+    <div class="help-box details-content">
     <strong>{{ expl_msg.titulo }}</strong>
     {% for p in expl_msg.paragrafos %}
     <p class="muted small">{{ p }}</p>
@@ -47,8 +68,11 @@
       <li>{{ d }}</li>
       {% endfor %}
     </ul>
-  </div>
+    </div>
+  </details>
 
+  <details class="compact-details">
+  <summary>Ver outros modelos prontos</summary>
   <p class="small" style="margin:16px 0 8px"><strong>Templates prontos</strong> — clique para copiar pro editor (depois salve):</p>
   <div class="preset-grid">
     {% for pack in presets_mensagem %}
@@ -61,6 +85,7 @@
     <script type="text/plain" id="preset-msg-{{ pack.id }}">{{ pack.texto }}</script>
     {% endfor %}
   </div>
+  </details>
 
   {% if aviso_modelo %}<div class="flash erro">{{ aviso_modelo }}</div>{% endif %}
   {% if aviso_diversidade %}<div class="flash aviso">{{ aviso_diversidade }}</div>{% endif %}
@@ -78,12 +103,15 @@
   </form>
 
   {% if previas %}
+  <details class="compact-details preview-details">
+  <summary>Ver prévia com leads reais</summary>
   <h2 style="margin-top:20px">Prévia com leads reais</h2>
   <p class="muted small">É exatamente o texto que sairia no WhatsApp (sorteio de variação incluso).</p>
   {% for p in previas %}
   <div class="previa"><strong>{{ p.nome }}</strong> · {{ p.telefone }}
 {{ p.texto }}</div>
   {% endfor %}
+  </details>
   {% endif %}
 </section>
 
@@ -136,8 +164,8 @@
 <section class="card" id="ia-conversa">
   <div class="section-heading">
     <div>
-      <h2>Conversa depois da resposta</h2>
-      <p class="muted small">O Gemini classifica se você falou com atendente ou decisor, conduz a próxima pergunta e transfere para uma pessoa quando necessário.</p>
+      <h2>2. Respostas com IA</h2>
+      <p class="muted small">Comece em rascunho. A IA sugere e você aprova.</p>
     </div>
     <a class="btn btn-sm" href="/conversas?campanha_id={{ campanha.id }}">Abrir conversas</a>
   </div>
@@ -146,11 +174,14 @@
   <div class="flash aviso"><strong>Falta a chave do Gemini.</strong> Adicione <span class="mono">GEMINI_API_KEY</span> no arquivo <span class="mono">.env</span> antes de ativar.</div>
   {% endif %}
 
-  <div class="help-box compact">
+  <details class="compact-details">
+    <summary>Regras e privacidade</summary>
+    <div class="help-box compact details-content">
     <p class="small"><strong>Comportamento fixo de segurança</strong></p>
     <p class="muted small">A IA não inventa informações, respeita pedidos de parada, limita o tamanho das respostas e chama uma pessoa em casos sensíveis ou de baixa confiança. Se perguntarem, ela informa que é um atendimento automatizado — sem fingir ser humana.</p>
     <p class="muted small"><strong>Privacidade:</strong> a camada gratuita do Gemini pode usar conteúdo para melhorar produtos do Google. Para dados reais de clientes, revise os termos e considere uma modalidade paga antes de ativar.</p>
-  </div>
+    </div>
+  </details>
 
   <form method="post" action="/campanhas/{{ campanha.id }}/ia">
     <input type="hidden" name="csrf" value="{{ csrf }}">
@@ -170,8 +201,8 @@
         <input type="number" name="limite_respostas_ia" min="1" max="20" value="{{ campanha.limite_respostas_ia }}">
       </label>
     </div>
-    <label>Objetivo e contexto comercial
-      <span class="field-hint">Diga o que você oferece, quem é o decisor e quando transferir. As regras de segurança acima não podem ser removidas por este texto.</span>
+    <label>Objetivo da conversa
+      <span class="field-hint">O padrão já busca o responsável e sugere uma reunião de 15 minutos.</span>
       <textarea name="prompt_ia" rows="7" maxlength="6000">{{ campanha.prompt_ia or prompt_ia_padrao }}</textarea>
     </label>
     <button class="btn btn-primary" type="submit">Salvar configuração da IA</button>
@@ -179,9 +210,12 @@
 </section>
 
 {# ========== RITMO ========== #}
-<section class="card">
-  <h2>Ritmo (anti-ban)</h2>
+<section class="card" id="ritmo">
+  <h2>3. Ritmo</h2>
+  <p class="muted small">O padrão atual já está pronto para uso. Ajuste apenas se precisar.</p>
 
+  <details class="compact-details">
+  <summary>Ajuda e ritmos prontos</summary>
   <div class="help-box">
     <strong>{{ expl_ritmo.titulo }}</strong>
     {% for p in expl_ritmo.paragrafos %}
@@ -229,6 +263,7 @@
     </div>
     {% endfor %}
   </div>
+  </details>
 
   {% if avisos_ritmo %}
   <div class="flash aviso">
@@ -276,9 +311,11 @@
 
 {# ========== DISPARO ========== #}
 <section class="card" id="painel-disparo">
-  <h2>Disparo</h2>
+  <h2>4. Revisar e iniciar</h2>
 
-  <div class="help-box compact">
+  <details class="compact-details">
+    <summary>Ver checklist</summary>
+    <div class="help-box compact details-content">
     <p class="muted small" style="margin:0">
       Checklist: (1) WhatsApp <strong>conectado</strong> ·
       (2) modelos <strong>salvos</strong> ·
@@ -287,7 +324,8 @@
       (5) Docker/app no ar.
       A <strong>primeira</strong> mensagem sai logo após iniciar; as seguintes esperam o intervalo.
     </p>
-  </div>
+    </div>
+  </details>
 
   {% if campanha.conexao_id is none %}
   <p class="muted">Vincule um WhatsApp conectado antes de disparar.</p>

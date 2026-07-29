@@ -9,7 +9,40 @@ from __future__ import annotations
 # Mensagens: packs de variacoes separadas por ---
 # ---------------------------------------------------------------------------
 
+MODELOS_IA_PEQUENOS_NEGOCIOS: tuple[str, ...] = (
+    (
+        "Oi, espero que esteja tudo bem. Trabalho com automações de IA e consultoria para "
+        "pequenos negócios, com foco em reduzir tarefas manuais e melhorar o "
+        "atendimento. Gostaria de marcar uma conversa de 15 minutos com o "
+        "responsável da {nome}. Você consegue me indicar com quem falar?"
+    ),
+    (
+        "Olá! Meu trabalho é ajudar pequenos negócios a simplificar atendimento "
+        "e rotinas com automações de IA. Queria entender se isso faz sentido "
+        "para a {nome} e, se sim, agendar uma conversa breve com o responsável. "
+        "Você é a pessoa certa?"
+    ),
+    (
+        "Bom dia! Trabalho com consultoria e automações de IA para pequenas "
+        "empresas. Queria conversar com quem cuida de atendimento e processos "
+        "na {nome} para identificar se há algo que valha automatizar. Com quem "
+        "posso falar?"
+    ),
+    (
+        "Oi! Encontrei a {nome} pesquisando empresas de {categoria}. Trabalho "
+        "com automações de IA para pequenos negócios e gostaria de apresentar "
+        "algumas possibilidades em uma reunião curta. Posso falar com o "
+        "responsável por essa área?"
+    ),
+)
+
 PRESETS_MENSAGEM: list[dict[str, str]] = [
+    {
+        "id": "ia_pequenos_negocios",
+        "titulo": "IA para pequenos negócios (recomendado)",
+        "descricao": "Apresenta o serviço e pede o contato do responsável.",
+        "texto": "\n---\n".join(MODELOS_IA_PEQUENOS_NEGOCIOS),
+    },
     {
         "id": "pet_maps",
         "titulo": "Pet / loja no Maps",

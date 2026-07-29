@@ -282,6 +282,8 @@ class TestCampanha:
             campanha = s.scalar(select(Campanha))
             assert campanha is not None
             assert campanha.nome == "Pets Canoas"
+            assert len(campanha.modelos) == 4
+            assert all("automações de IA" in modelo for modelo in campanha.modelos)
             leads = s.scalars(select(Lead).where(Lead.campanha_id == campanha.id)).all()
             # fixo descartado; so o celular entra
             assert len(leads) == 1
@@ -407,7 +409,7 @@ class TestCampanha:
         pagina = client.get(f"/campanhas/{campanha_id}")
         assert pagina.status_code == 200
         assert "Qual mensagem funciona melhor?" in pagina.text
-        assert "Conversa depois da resposta" in pagina.text
+        assert "2. Respostas com IA" in pagina.text
         csrf = _csrf(pagina.text)
 
         resposta = client.post(

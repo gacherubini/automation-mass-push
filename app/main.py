@@ -47,6 +47,7 @@ from app.gemini import Gemini
 from app.templates_presets import (
     EXPLICACAO_MENSAGEM,
     EXPLICACAO_RITMO,
+    MODELOS_IA_PEQUENOS_NEGOCIOS,
     PRESETS_MENSAGEM,
     PRESETS_RITMO,
 )
@@ -85,9 +86,11 @@ logger = logging.getLogger(__name__)
 # Nome da instancia Evolution: so [a-zA-Z0-9_-], ate 100 chars (models).
 _RE_INSTANCIA = re.compile(r"[^a-zA-Z0-9_-]+")
 PROMPT_IA_PADRAO = (
+    "Representamos uma consultoria de automacoes de IA para pequenos negocios. "
     "Converse de forma breve e educada. Descubra se a pessoa que respondeu "
-    "e quem decide sobre a contratacao. Se nao for, pergunte como falar com "
-    "o responsavel. Quando houver interesse, transfira para uma pessoa do time."
+    "cuida de atendimento, processos ou tecnologia. Se nao for, pergunte como "
+    "falar com o responsavel. Entenda uma tarefa repetitiva e, quando houver "
+    "interesse, convide para uma reuniao de 15 minutos e transfira para o time."
 )
 
 
@@ -680,7 +683,7 @@ def criar_app(
             usuario_id=usuario.id,
             conexao_id=conexao_fk,
             nome=nome,
-            modelos=[],
+            modelos=list(MODELOS_IA_PEQUENOS_NEGOCIOS),
             status=StatusCampanha.RASCUNHO,
         )
         sessao.add(campanha)

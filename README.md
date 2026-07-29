@@ -9,7 +9,7 @@ Cada usuário loga no dashboard e conecta o **próprio** WhatsApp lendo um QR
 code. As mensagens saem do número de quem escaneou.
 
 > **Status:** disparo, experimentos, dashboard e conversa com IA implementados
-> e cobertos por 242 testes. A validação com WhatsApp e Gemini reais deve
+> e cobertos por 243 testes. A validação com WhatsApp e Gemini reais deve
 > começar em modo rascunho e baixo volume — integrações externas não rodam no CI.
 
 ---

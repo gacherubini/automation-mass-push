@@ -217,6 +217,41 @@ th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: u
 .section-heading p { margin: 0 0 12px; }
 .page-heading { margin-bottom: 18px; }
 .variation-copy { max-width: 340px; margin-top: 3px; }
+.campaign-steps {
+  display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 18px;
+  position: sticky; top: 8px; z-index: 5;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(10px); padding: 8px; border-radius: 10px;
+}
+.campaign-steps a {
+  display: inline-flex; align-items: center; gap: 6px; color: var(--muted);
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 999px; padding: 7px 11px; font-size: .82rem;
+}
+.campaign-steps a:hover { color: var(--text); border-color: var(--accent-dim); text-decoration: none; }
+.campaign-steps span {
+  display: grid; place-items: center; width: 19px; height: 19px;
+  border-radius: 50%; background: var(--accent); color: #042f2a; font-weight: 700;
+}
+.recommended-preset {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-input));
+  border-radius: 10px; padding: 13px 14px; margin: 12px 0;
+}
+.recommended-preset p { margin: 3px 0 0; }
+.compact-details {
+  border: 1px solid var(--border); border-radius: 9px;
+  background: var(--bg-input); margin: 10px 0; overflow: hidden;
+}
+.compact-details > summary {
+  cursor: pointer; color: var(--text); font-size: .88rem; font-weight: 600;
+  padding: 10px 12px; user-select: none;
+}
+.compact-details[open] > summary { border-bottom: 1px solid var(--border); }
+.details-content { margin: 0; border: 0; border-radius: 0; }
+.compact-details .preset-grid { padding: 12px; margin-bottom: 0; }
+.preview-details { margin-top: 16px; }
 
 /* --- inbox de conversas --- */
 .filter-card { padding-top: 12px; padding-bottom: 12px; }
@@ -268,4 +303,6 @@ th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: u
   .conversation-meta { align-items: flex-start; flex-direction: row; flex-wrap: wrap; }
   .message { width: 94%; }
   .filter-form { align-items: stretch; flex-direction: column; }
+  .recommended-preset { align-items: flex-start; flex-direction: column; }
+  .campaign-steps { position: static; }
 }
