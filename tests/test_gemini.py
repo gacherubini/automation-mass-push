@@ -59,7 +59,7 @@ class TestGemini:
         assert request.headers["x-goog-api-key"] == "segredo"
         assert request.url.path.endswith("/models/gemini-teste:generateContent")
         corpo = json.loads(request.content)
-        assert corpo["generationConfig"]["responseFormat"]["text"]["mimeType"] == "application/json"
+        assert corpo["generationConfig"]["responseFormat"]["text"]["mimeType"] == "APPLICATION_JSON"
 
     def test_sem_chave_falha_antes_da_rede(self):
         gemini = Gemini("", "modelo", "https://gemini.test")

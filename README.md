@@ -113,7 +113,7 @@ Para usar a conversa com IA, crie também uma chave no Google AI Studio:
 
 ```bash
 GEMINI_API_KEY=...cole-aqui...
-GEMINI_MODEL=gemini-2.5-flash-lite
+GEMINI_MODEL=gemini-3.5-flash-lite
 ```
 
 Sem essa chave, campanhas e inbox continuam funcionando, mas a interface não

@@ -104,7 +104,7 @@ class Configuracao:
     # Conversa com IA. Sem chave, o recurso fica indisponivel e o restante da
     # aplicacao continua funcionando normalmente.
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash-lite"
+    gemini_model: str = "gemini-3.5-flash-lite"
     gemini_url: str = "https://generativelanguage.googleapis.com/v1beta"
 
     # `echo` do SQLAlchemy. Util para ver a query que o ritmo dispara; barulhento
@@ -169,7 +169,7 @@ def configuracao() -> Configuracao:
         evolution_url=_texto("EVOLUTION_URL", "http://localhost:8080").rstrip("/"),
         evolution_api_key=evolution_api_key,
         gemini_api_key=_texto("GEMINI_API_KEY", ""),
-        gemini_model=_texto("GEMINI_MODEL", "gemini-2.5-flash-lite"),
+        gemini_model=_texto("GEMINI_MODEL", "gemini-3.5-flash-lite"),
         gemini_url=_texto(
             "GEMINI_URL",
             "https://generativelanguage.googleapis.com/v1beta",

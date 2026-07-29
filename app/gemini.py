@@ -162,7 +162,7 @@ class Gemini:
                 "maxOutputTokens": 500,
                 "responseFormat": {
                     "text": {
-                        "mimeType": "application/json",
+                        "mimeType": "APPLICATION_JSON",
                         "schema": SCHEMA_DECISAO,
                     }
                 },
