@@ -5,17 +5,19 @@ projeto do zero, **leia este arquivo inteiro antes de escrever qualquer linha**.
 Ele existe para você não re-decidir o que já foi decidido nem repetir erro já
 cometido.
 
-Última atualização: 2026-07-28 — sessão encerrada pelo dono. Fase 1 utilizável
-localmente; um envio real chegou a ser entregue. Próximo passo é estabilizar o
-uso diário (Docker/app) e só depois Fase 2.
+Última atualização: 2026-07-29. Disparo, experimentos de mensagem, dashboard e
+conversa com Gemini estão implementados. A suíte tem 240 testes passando; falta
+validar Gemini + WhatsApp reais em modo rascunho e aplicar a nova migração com o
+Docker Desktop ligado.
 
 ---
 
 ## 0. Estado ao parar (leia primeiro)
 
-**O que está pronto e no `main`:** núcleo puro, planilha, mensagem, models,
+**O que está pronto nesta árvore:** núcleo puro, planilha, mensagem, models,
 Alembic, docker-compose, cliente Evolution, auth, dashboard, motor de disparo,
-webhook, presets de ritmo/mensagem na UI, `start-local.ps1`.
+webhook, presets, experimentos balanceados, métricas por variação, cliente
+Gemini estruturado, inbox, rascunhos, automação com limites e handoff humano.
 
 **Prova de envio real (nesta máquina):**
 
@@ -44,7 +46,8 @@ powershell -ExecutionPolicy Bypass -File .\start-local.ps1
 Dashboard: http://127.0.0.1:8000  
 Evolution: http://localhost:8080  
 
-`.env` local (não versionado): precisa de `SECRET_KEY` e `EVOLUTION_API_KEY`.
+`.env` local (não versionado): precisa de `SECRET_KEY` e `EVOLUTION_API_KEY`;
+`GEMINI_API_KEY` é necessária apenas para ativar a IA.
 
 ---
 
@@ -52,7 +55,7 @@ Evolution: http://localhost:8080
 
 Plataforma de prospecção por WhatsApp.
 
-Fluxo do usuário, em 8 passos:
+Fluxo do usuário, em 10 passos:
 
 1. Loga no dashboard
 2. *Conectar WhatsApp* → aparece um QR code → escaneia com o celular
@@ -62,8 +65,9 @@ Fluxo do usuário, em 8 passos:
 5. Escreve a primeira mensagem, com lacunas: `Oi! Vi a {nome} no Google Maps...`
 6. Vê a prévia preenchida com lojas reais
 7. Dispara. As mensagens saem devagar; a tela mostra progresso ao vivo
-8. Quem responde vira status *Respondeu*, e o usuário assume a conversa no
-   WhatsApp normal
+8. O painel compara qual variação gera mais respostas e decisores
+9. Quem responde entra na inbox; Gemini gera rascunho ou responde com limites
+10. Baixa confiança, interesse ou pedido de pessoa transfere para o humano
 
 A planilha de entrada vem do projeto irmão
 `C:\Users\guilh\Documents\codigo\scrapping` (extensão de Chrome que raspa o
@@ -123,6 +127,8 @@ python -m pytest tests/ -q
 - [x] **presets** de mensagem e ritmo + textos de ajuda na campanha
       (`app/templates_presets.py` + `campanhas/detalhe.html`)
 - [x] conexão: poll de status, botão **Recomeçar do zero**
+- [x] KPIs gerais + resultados por variação da mensagem
+- [x] inbox com timeline, rascunho, aprovação, resposta manual e encerramento
 
 ### Motor de disparo
 
@@ -138,10 +144,17 @@ python -m pytest tests/ -q
 - [ ] Uso estável no dia a dia (Docker Desktop no Windows ainda é o elo fraco)
 - [ ] Volume real (dezenas de lojas) com acompanhamento humano
 
-### Fase 2 — decidida para depois, não comece sem combinar
+### Conversa com IA
 
-- [ ] IA (Gemini via n8n) respondendo o lead
-- [ ] Regras de quando a IA passa a conversa para humano
+- [x] `app/gemini.py` — adaptador isolado, schema estruturado e erros claros
+- [x] `app/conversa.py` — registro idempotente, contexto, rascunho/automático
+- [x] handoff por baixa confiança, interesse, limite ou pedido de humano
+- [x] opt-out encerra e nunca agenda resposta automática
+- [x] modos configuráveis por campanha e limite de 1–20 respostas
+- [ ] validação real com chave Gemini e números controlados
+
+### Próxima fase
+
 - [ ] Deploy em nuvem (Fly.io), para funcionar com o PC desligado
 
 ---
@@ -155,14 +168,22 @@ retrabalho.
 central da plataforma. O risco de banimento é do número de quem escaneou, e a
 tela do QR precisa avisar isso.
 
-**Fase 1 é só o disparo.** A IA (Gemini via n8n) respondendo o lead ficou
-explicitamente para depois. O desenho não deve fechar a porta: disparo e
-conversa são módulos separados, e a Fase 1 apenas registra "este lead
-respondeu".
+**Disparo e conversa são módulos separados.** `gemini.py` conhece a API;
+`conversa.py` conhece o fluxo; webhook e dashboard conhecem apenas o
+gerenciador. Isso permite trocar Gemini direto por n8n ou outro provedor sem
+reescrever a regra de negócio.
 
-**A primeira mensagem é escrita pelo usuário**, não gerada por IA. Modelo com
-lacunas, com várias variações que o sistema sorteia. Templates na UI são
-atalhos, não substituem o texto do usuário.
+**A primeira mensagem é escrita pelo usuário**, não gerada por IA. Modelos com
+lacunas são distribuídos de forma balanceada; o desempate é aleatório e cada
+envio guarda índice + snapshot do texto. Templates são atalhos.
+
+**A IA não finge ser humana.** Não precisa se anunciar espontaneamente, mas se
+for perguntada informa que há automação e oferece atendimento humano. A camada
+fixa também proíbe inventar identidade, preço, história ou resultado.
+
+**Privacidade do Gemini:** a modalidade gratuita pode usar conteúdo para
+melhorar produtos do Google. O aviso fica no `.env.example`, README e UI. Para
+clientes reais, revisar termos e considerar modalidade paga.
 
 **Roda local primeiro** (Docker na máquina do dono), nuvem depois. Limitação
 aceita: com o PC desligado, o WhatsApp desconecta.
@@ -228,7 +249,8 @@ Mensagens em português, motivação no corpo. Sem `Co-Authored-By`.
    voltar a enviar sozinha no startup.
 3. **Campanha de volume baixo real** (5–10 lojas conhecidas) com preset
    conservador, acompanhar entrega/resposta/opt-out.
-4. Só então **Fase 2** (IA / nuvem).
+4. Configurar `GEMINI_API_KEY`, ativar **Rascunho** e validar 10–20 respostas.
+5. Só depois avaliar modo automático e deploy em nuvem.
 
 Não reabrir: infra, models, cliente Evolution, motor, UI base.
 
@@ -262,6 +284,10 @@ Não reabrir: infra, models, cliente Evolution, motor, UI base.
   - Excel float → `planilha._texto()`
 - **Webhook** precisa alcançar o app (`WEBHOOK_GLOBAL_URL` com
   `host.docker.internal` se uvicorn está no host).
+- **Webhook duplicado:** `Interacao.id_externo` é único; a resposta da IA usa
+  `origem_interacao_id` único. Não remover essas duas garantias.
+- **IA automática:** baixa confiança ou `precisa_humano=true` sempre vira
+  rascunho, mesmo no modo automático.
 
 ---
 
@@ -285,8 +311,9 @@ app/
   telefone.py ritmo.py planilha.py mensagem.py
   config.py db.py models.py
   evolution.py auth.py disparo.py
+  gemini.py conversa.py resultados.py
   templates_presets.py   # textos da UI (mensagem + ritmo)
-  main.py                # FastAPI + lifespan retoma workers
+  main.py                # FastAPI + dashboard + inbox + webhook
   templates/ campanhas/detalhe.html  # presets + ajuda
   templates/ conexao.html            # QR + poll + recomeçar
 start-local.ps1

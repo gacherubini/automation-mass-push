@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 from datetime import datetime, time, timedelta, timezone
 from types import SimpleNamespace
 
@@ -185,6 +186,34 @@ class TestProcessarProximo:
         assert msg.status_entrega is StatusEntrega.ENVIADA
         assert "Bicho Mania" in msg.texto or "Oi" in msg.texto or "Ola" in msg.texto
         assert disparo.em_ja_contatado(sessao, campanha.usuario_id, lead.telefone)
+
+    def test_distribui_variacoes_com_amostras_equilibradas(self, sessao: Session):
+        leads = [
+            (f"Loja {i}", f"55519999999{i:02d}")
+            for i in range(5)
+        ]
+        _u, _c, campanha = _cenario(
+            sessao,
+            modelos=["A {nome}", "B {nome}"],
+            leads=leads,
+        )
+        rng = random.Random(42)
+        evo = _EvoFake()
+
+        for _ in leads:
+            resultado = disparo.processar_proximo(
+                sessao, campanha, evo, agora=_AGORA, sorteio=rng
+            )
+            assert resultado.acao == "enviado"
+
+        mensagens = sessao.scalars(
+            select(Mensagem).where(Mensagem.campanha_id == campanha.id)
+        ).all()
+        contagens = {
+            indice: sum(m.variante_indice == indice for m in mensagens)
+            for indice in (1, 2)
+        }
+        assert set(contagens.values()) == {2, 3}
 
     def test_respeita_optout(self, sessao: Session):
         usuario, _c, campanha = _cenario(sessao)

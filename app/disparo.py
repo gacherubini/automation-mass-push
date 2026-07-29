@@ -412,7 +412,14 @@ def processar_proximo(
     if numero_wa != lead.telefone:
         lead.telefone = numero_wa
 
-    texto = mod_mensagem.montar_para(campanha.modelos, lead, sorteio)
+    indice_variante = _indice_variante_equilibrada(sessao, campanha, sorteio)
+    escolha = mod_mensagem.escolher_para(
+        campanha.modelos,
+        lead,
+        sorteio,
+        indice=indice_variante,
+    )
+    texto = escolha.texto
 
     try:
         enviada = evolution.enviar_texto(
@@ -425,6 +432,8 @@ def processar_proximo(
                 lead_id=lead.id,
                 campanha_id=campanha.id,
                 texto=texto,
+                variante_indice=escolha.indice,
+                variante_texto=escolha.modelo,
                 status_entrega=StatusEntrega.FALHOU,
                 erro=erro.mensagem,
             )
@@ -443,6 +452,8 @@ def processar_proximo(
                 lead_id=lead.id,
                 campanha_id=campanha.id,
                 texto=texto,
+                variante_indice=escolha.indice,
+                variante_texto=escolha.modelo,
                 status_entrega=StatusEntrega.FALHOU,
                 erro=erro.mensagem,
             )
@@ -461,6 +472,8 @@ def processar_proximo(
             lead_id=lead.id,
             campanha_id=campanha.id,
             texto=texto,
+            variante_indice=escolha.indice,
+            variante_texto=escolha.modelo,
             status_entrega=StatusEntrega.ENVIADA,
             id_externo=enviada.id_mensagem or None,
         )
@@ -477,6 +490,35 @@ def processar_proximo(
         motivo=f"Enviado para {numero_wa}.",
         espera_seg=espera,
     )
+
+
+def _indice_variante_equilibrada(
+    sessao: Session,
+    campanha: Campanha,
+    sorteio: random.Random | None = None,
+) -> int:
+    """Escolhe aleatoriamente entre as variacoes menos usadas.
+
+    Mantem as amostras com diferenca maxima de uma tentativa, mas nao cria um
+    rodizio previsivel: quando ha empate, a ordem e sorteada.
+    """
+    totais = dict(
+        sessao.execute(
+            select(Mensagem.variante_indice, func.count())
+            .where(
+                Mensagem.campanha_id == campanha.id,
+                Mensagem.variante_indice.is_not(None),
+            )
+            .group_by(Mensagem.variante_indice)
+        ).all()
+    )
+    indices = list(range(1, len(campanha.modelos) + 1))
+    menor = min(int(totais.get(indice, 0)) for indice in indices)
+    candidatos = [
+        indice for indice in indices if int(totais.get(indice, 0)) == menor
+    ]
+    rng = sorteio or random
+    return rng.choice(candidatos)
 
 
 def _pausar(sessao: Session, campanha: Campanha, motivo: str) -> ResultadoPasso:

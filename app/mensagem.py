@@ -60,6 +60,15 @@ class MensagemPronta:
 
 
 @dataclass(frozen=True)
+class EscolhaModelo:
+    """Variacao escolhida + snapshot necessario para medir o experimento."""
+
+    indice: int
+    modelo: str
+    texto: str
+
+
+@dataclass(frozen=True)
 class Diversidade:
     """Quanto os modelos espalham o texto pela lista de destinatarios."""
 
@@ -169,7 +178,36 @@ def montar_para(
     modelos: Sequence[str], lead: Any, sorteio: random.Random | None = None
 ) -> str:
     """Sorteia uma variacao e monta a mensagem daquele lead."""
-    return montar(sortear(modelos, sorteio), lead)
+    return escolher_para(modelos, lead, sorteio).texto
+
+
+def escolher_para(
+    modelos: Sequence[str],
+    lead: Any,
+    sorteio: random.Random | None = None,
+    *,
+    indice: int | None = None,
+) -> EscolhaModelo:
+    """Escolhe, monta e identifica a variacao usada.
+
+    O indice e humano (comeca em 1). `modelo` e o snapshot: se a campanha for
+    editada depois, o resultado antigo continua ligado ao texto que realmente
+    originou aquela conversa.
+    """
+    validar(modelos)
+    rng = sorteio or random
+    if indice is None:
+        indice_zero = rng.randrange(len(modelos))
+    elif 1 <= indice <= len(modelos):
+        indice_zero = indice - 1
+    else:
+        raise ModeloInvalido("Indice de variacao fora da lista de modelos.")
+    modelo = modelos[indice_zero]
+    return EscolhaModelo(
+        indice=indice_zero + 1,
+        modelo=modelo,
+        texto=montar(modelo, lead),
+    )
 
 
 def previa(

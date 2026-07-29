@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Conversas — Prospecção{% endblock %}
+{% block content %}
+<div class="section-heading page-heading">
+  <div>
+    <h1>Conversas</h1>
+    <p class="lead">Uma inbox para revisar rascunhos, assumir transferências e acompanhar quem é o decisor.</p>
+  </div>
+</div>
+
+<section class="card filter-card">
+  <form method="get" action="/conversas" class="filter-form">
+    <label>Campanha
+      <select name="campanha_id" onchange="this.form.submit()">
+        <option value="">Todas as campanhas</option>
+        {% for c in campanhas %}
+        <option value="{{ c.id }}" {% if campanha_id == c.id %}selected{% endif %}>{{ c.nome }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% if campanha_id %}<a class="btn btn-sm" href="/conversas">Limpar filtro</a>{% endif %}
+  </form>
+</section>
+
+{% if conversas %}
+<div class="conversation-list">
+  {% for c in conversas %}
+  <a class="conversation-row {{ 'needs-attention' if c.status.value in ['aguardando_humano', 'erro'] else '' }}" href="/conversas/{{ c.id }}">
+    <div class="conversation-main">
+      <div class="conversation-title">
+        <strong>{{ c.lead.nome }}</strong>
+        <span class="badge {{ c.status.value }}">{{ c.status.value|replace('_', ' ') }}</span>
+      </div>
+      <p>{{ c.resumo or 'Conversa recebida; ainda sem resumo.' }}</p>
+      <span class="muted small">{{ c.lead.campanha.nome }} · {{ c.lead.telefone_exibicao or c.lead.telefone }}</span>
+    </div>
+    <div class="conversation-meta">
+      <span class="badge {{ c.papel_contato.value }}">{{ c.papel_contato.value }}</span>
+      <span class="small muted">{{ c.etapa.value|replace('_', ' ') }}</span>
+      {% if c.atualizada_em %}<time class="small muted">{{ c.atualizada_em.strftime('%d/%m %H:%M') }}</time>{% endif %}
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty">Nenhuma conversa neste filtro. Quando um lead responder, ela aparecerá aqui.</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}{{ lead.nome if lead else 'Conversa' }} — Prospecção{% endblock %}
+{% block content %}
+<p class="muted small"><a href="/conversas">← Conversas</a></p>
+<div class="section-heading page-heading">
+  <div>
+    <h1>{{ lead.nome if lead else 'Conversa' }}</h1>
+    <p class="lead">
+      {{ lead.telefone_exibicao or lead.telefone if lead else '' }}
+      {% if campanha %} · <a href="/campanhas/{{ campanha.id }}">{{ campanha.nome }}</a>{% endif %}
+    </p>
+  </div>
+  <div class="conversation-statuses">
+    <span class="badge {{ conversa.status.value }}">{{ conversa.status.value|replace('_', ' ') }}</span>
+    <span class="badge {{ conversa.papel_contato.value }}">{{ conversa.papel_contato.value }}</span>
+  </div>
+</div>
+
+<div class="grid-conversation">
+  <section class="card timeline-card">
+    <div class="section-heading">
+      <div>
+        <h2>Histórico</h2>
+        <p class="muted small">Lead à esquerda; IA e equipe à direita.</p>
+      </div>
+    </div>
+    <div class="timeline">
+      {% for item in interacoes %}
+      <article class="message {{ item.autor.value }} {{ item.status.value }}">
+        <div class="message-label">
+          <strong>{% if item.autor.value == 'lead' %}Cliente{% elif item.autor.value == 'ia' %}IA{% else %}Equipe{% endif %}</strong>
+          <span>{{ item.status.value }}</span>
+        </div>
+        {% if item.texto %}<div class="message-text">{{ item.texto }}</div>{% endif %}
+        {% if item.erro %}<div class="message-error">{{ item.erro }}</div>{% endif %}
+        <time>{{ item.criada_em.strftime('%d/%m/%Y %H:%M') if item.criada_em else '' }}</time>
+        {% if item.autor.value == 'ia' and item.status.value == 'rascunho' %}
+        <form method="post" action="/conversas/{{ conversa.id }}/aprovar/{{ item.id }}" class="draft-action">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="btn btn-primary btn-sm" type="submit">Aprovar e enviar</button>
+        </form>
+        {% endif %}
+      </article>
+      {% else %}
+      <div class="empty">Ainda não há mensagens registradas.</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <aside>
+    <section class="card">
+      <h2>Leitura da conversa</h2>
+      <dl class="facts">
+        <div><dt>Status</dt><dd>{{ conversa.status.value|replace('_', ' ') }}</dd></div>
+        <div><dt>Contato</dt><dd>{{ conversa.papel_contato.value }}</dd></div>
+        <div><dt>Etapa</dt><dd>{{ conversa.etapa.value|replace('_', ' ') }}</dd></div>
+        <div><dt>Respostas da IA</dt><dd>{{ conversa.total_respostas_ia }}{% if campanha %} / {{ campanha.limite_respostas_ia }}{% endif %}</dd></div>
+      </dl>
+      {% if conversa.resumo %}<p class="summary-box">{{ conversa.resumo }}</p>{% endif %}
+      <div class="btn-row">
+        {% if conversa.status.value in ['encerrada', 'erro', 'aguardando_humano'] and (not lead or lead.status.value != 'optout') %}
+        <form method="post" action="/conversas/{{ conversa.id }}/reabrir">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="btn btn-sm" type="submit">Reabrir automação</button>
+        </form>
+        {% endif %}
+        {% if conversa.status.value != 'encerrada' %}
+        <form method="post" action="/conversas/{{ conversa.id }}/encerrar">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="btn btn-danger btn-sm" type="submit">Encerrar</button>
+        </form>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Responder como equipe</h2>
+      {% if lead and lead.status.value == 'optout' %}
+      <div class="flash erro">Este contato pediu para não receber novas mensagens.</div>
+      {% else %}
+      <form method="post" action="/conversas/{{ conversa.id }}/responder">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label>Sua mensagem
+          <textarea name="texto" rows="5" maxlength="2000" required placeholder="Escreva uma resposta curta e objetiva..."></textarea>
+        </label>
+        <button class="btn btn-primary" type="submit">Enviar pelo WhatsApp</button>
+      </form>
+      {% endif %}
+    </section>
+  </aside>
+</div>
+{% endblock %}

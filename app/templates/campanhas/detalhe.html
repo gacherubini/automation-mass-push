@@ -87,6 +87,97 @@
   {% endif %}
 </section>
 
+{# ========== RESULTADOS DAS VARIAÇÕES ========== #}
+<section class="card" id="resultados-variacoes">
+  <div class="section-heading">
+    <div>
+      <h2>Qual mensagem funciona melhor?</h2>
+      <p class="muted small">Cada texto separado por <span class="mono">---</span> vira uma variação. O sistema guarda qual delas cada lead recebeu e compara os resultados.</p>
+    </div>
+  </div>
+  {% if resultados_variantes %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Variação</th>
+          <th>Enviadas</th>
+          <th>Respostas</th>
+          <th>Taxa</th>
+          <th>Decisores</th>
+          <th>Transferências</th>
+          <th>Opt-outs</th>
+          <th>Falhas</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in resultados_variantes %}
+        <tr>
+          <td><strong>#{{ r.indice }}</strong><div class="muted small variation-copy">{{ r.texto|truncate(100) }}</div></td>
+          <td>{{ r.enviadas }}</td>
+          <td>{{ r.respostas }}</td>
+          <td><strong>{{ r.taxa_resposta }}%</strong></td>
+          <td>{{ r.decisores }} <span class="muted small">({{ r.taxa_decisor }}%)</span></td>
+          <td>{{ r.transferencias }}</td>
+          <td>{{ r.optouts }}</td>
+          <td>{{ r.falhas }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted small">Compare apenas variações com volume parecido. Taxas muito cedo podem enganar; não escolha uma vencedora com poucas mensagens.</p>
+  {% else %}
+  <div class="empty">Os resultados aparecem aqui depois que os primeiros envios forem feitos.</div>
+  {% endif %}
+</section>
+
+{# ========== CONVERSA COM IA ========== #}
+<section class="card" id="ia-conversa">
+  <div class="section-heading">
+    <div>
+      <h2>Conversa depois da resposta</h2>
+      <p class="muted small">O Gemini classifica se você falou com atendente ou decisor, conduz a próxima pergunta e transfere para uma pessoa quando necessário.</p>
+    </div>
+    <a class="btn btn-sm" href="/conversas?campanha_id={{ campanha.id }}">Abrir conversas</a>
+  </div>
+
+  {% if not gemini_disponivel %}
+  <div class="flash aviso"><strong>Falta a chave do Gemini.</strong> Adicione <span class="mono">GEMINI_API_KEY</span> no arquivo <span class="mono">.env</span> antes de ativar.</div>
+  {% endif %}
+
+  <div class="help-box compact">
+    <p class="small"><strong>Comportamento fixo de segurança</strong></p>
+    <p class="muted small">A IA não inventa informações, respeita pedidos de parada, limita o tamanho das respostas e chama uma pessoa em casos sensíveis ou de baixa confiança. Se perguntarem, ela informa que é um atendimento automatizado — sem fingir ser humana.</p>
+    <p class="muted small"><strong>Privacidade:</strong> a camada gratuita do Gemini pode usar conteúdo para melhorar produtos do Google. Para dados reais de clientes, revise os termos e considere uma modalidade paga antes de ativar.</p>
+  </div>
+
+  <form method="post" action="/campanhas/{{ campanha.id }}/ia">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="grid-2">
+      <label>Modo
+        <span class="field-hint">Comece em rascunho para validar a abordagem.</span>
+        <select name="modo_ia">
+          {% for modo in modos_ia %}
+          <option value="{{ modo.value }}" {% if campanha.modo_ia == modo %}selected{% endif %}>
+            {% if modo.value == 'desligada' %}Desligada{% elif modo.value == 'rascunho' %}Rascunho — humano aprova{% else %}Automática com limites{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Máximo de respostas automáticas
+        <span class="field-hint">Ao atingir o limite, a conversa vai para a inbox humana.</span>
+        <input type="number" name="limite_respostas_ia" min="1" max="20" value="{{ campanha.limite_respostas_ia }}">
+      </label>
+    </div>
+    <label>Objetivo e contexto comercial
+      <span class="field-hint">Diga o que você oferece, quem é o decisor e quando transferir. As regras de segurança acima não podem ser removidas por este texto.</span>
+      <textarea name="prompt_ia" rows="7" maxlength="6000">{{ campanha.prompt_ia or prompt_ia_padrao }}</textarea>
+    </label>
+    <button class="btn btn-primary" type="submit">Salvar configuração da IA</button>
+  </form>
+</section>
+
 {# ========== RITMO ========== #}
 <section class="card">
   <h2>Ritmo (anti-ban)</h2>

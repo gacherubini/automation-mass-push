@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -25,8 +25,10 @@ from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from app import disparo as mod_disparo
+from app import conversa as mod_conversa
 from app import mensagem as mod_mensagem
 from app import planilha as mod_planilha
+from app import resultados as mod_resultados
 from app.auth import (
     autenticar,
     csrf_token,
@@ -40,6 +42,8 @@ from app.auth import (
 from app.config import configuracao
 from app.db import fabrica_de_sessao, get_sessao
 from app.disparo import GerenciadorDisparo, retomar_campanhas_rodando
+from app.conversa import GerenciadorConversa
+from app.gemini import Gemini
 from app.templates_presets import (
     EXPLICACAO_MENSAGEM,
     EXPLICACAO_RITMO,
@@ -56,13 +60,20 @@ from app.evolution import (
     interpretar_webhook,
 )
 from app.models import (
+    AutorInteracao,
     Campanha,
     Conexao,
+    Conversa,
+    EtapaConversa,
+    Interacao,
     Lead,
+    ModoIA,
     OptOut,
     StatusCampanha,
     StatusConexao,
+    StatusConversa,
     StatusEntrega,
+    StatusInteracao,
     StatusLead,
     Usuario,
 )
@@ -73,12 +84,18 @@ logger = logging.getLogger(__name__)
 
 # Nome da instancia Evolution: so [a-zA-Z0-9_-], ate 100 chars (models).
 _RE_INSTANCIA = re.compile(r"[^a-zA-Z0-9_-]+")
+PROMPT_IA_PADRAO = (
+    "Converse de forma breve e educada. Descubra se a pessoa que respondeu "
+    "e quem decide sobre a contratacao. Se nao for, pergunte como falar com "
+    "o responsavel. Quando houver interesse, transfira para uma pessoa do time."
+)
 
 
 def criar_app(
     *,
     fabrica_evolution: Callable[[], Evolution] | None = None,
     gerenciador_disparo: GerenciadorDisparo | None = None,
+    gerenciador_conversa: GerenciadorConversa | None = None,
     retomar_no_startup: bool = True,
 ) -> FastAPI:
     """Monta a aplicacao. Fabricas injetaveis existem para o teste."""
@@ -93,6 +110,17 @@ def criar_app(
     if gerenciador_disparo is None:
         gerenciador_disparo = GerenciadorDisparo(
             fabrica_sessao=lambda: fabrica_de_sessao()(),
+            fabrica_evolution=_evolution,
+        )
+
+    if gerenciador_conversa is None:
+        gerenciador_conversa = GerenciadorConversa(
+            fabrica_sessao=lambda: fabrica_de_sessao()(),
+            fabrica_ia=lambda: Gemini(
+                configuracao().gemini_api_key,
+                configuracao().gemini_model,
+                configuracao().gemini_url,
+            ),
             fabrica_evolution=_evolution,
         )
 
@@ -134,6 +162,7 @@ def criar_app(
 
     app.state.fabrica_evolution = _evolution  # type: ignore[attr-defined]
     app.state.disparo = gerenciador_disparo  # type: ignore[attr-defined]
+    app.state.conversa = gerenciador_conversa  # type: ignore[attr-defined]
 
     # -- helpers de request -------------------------------------------------
 
@@ -309,10 +338,17 @@ def criar_app(
             .where(Conexao.usuario_id == usuario.id)
             .order_by(Conexao.id.desc())
         ).all()
+        resumo = mod_resultados.resumo_usuario(sessao, usuario.id)
         return templates.TemplateResponse(
             request,
             "home.html",
-            _ctx(request, usuario, campanhas=campanhas, conexoes=conexoes),
+            _ctx(
+                request,
+                usuario,
+                campanhas=campanhas,
+                conexoes=conexoes,
+                resumo=resumo,
+            ),
         )
 
     # -- conexao WhatsApp ---------------------------------------------------
@@ -728,6 +764,9 @@ def criar_app(
             .order_by(Conexao.id.desc())
         ).all()
         worker_ativo = app.state.disparo.esta_rodando(campanha.id)  # type: ignore[attr-defined]
+        resultados_variantes = mod_resultados.variantes_da_campanha(
+            sessao, campanha.id
+        )
 
         return templates.TemplateResponse(
             request,
@@ -752,8 +791,70 @@ def criar_app(
                 presets_ritmo=PRESETS_RITMO,
                 expl_msg=EXPLICACAO_MENSAGEM,
                 expl_ritmo=EXPLICACAO_RITMO,
+                resultados_variantes=resultados_variantes,
+                modos_ia=list(ModoIA),
+                gemini_disponivel=configuracao().gemini_disponivel,
+                prompt_ia_padrao=PROMPT_IA_PADRAO,
             ),
         )
+
+    @app.post("/campanhas/{campanha_id}/ia")
+    def campanha_salvar_ia(
+        campanha_id: int,
+        request: Request,
+        modo_ia: Annotated[str, Form()] = ModoIA.DESLIGADA.value,
+        prompt_ia: Annotated[str, Form()] = "",
+        limite_respostas_ia: Annotated[int, Form()] = 4,
+        csrf: Annotated[str, Form()] = "",
+        sessao: Session = Depends(get_sessao),
+        usuario: Usuario = Depends(_exigir_usuario),
+    ) -> Response:
+        volta = f"/campanhas/{campanha_id}"
+        bloqueio = _csrf_ou_volta(request, csrf, volta)
+        if bloqueio:
+            return bloqueio
+        campanha = _campanha_do_usuario(sessao, usuario, campanha_id)
+        if campanha is None:
+            return RedirectResponse("/app", status_code=303)
+        try:
+            modo = ModoIA(modo_ia)
+        except ValueError:
+            _flash(request, "erro", "Modo da IA invalido.")
+            return RedirectResponse(volta, status_code=303)
+
+        objetivo = prompt_ia.strip()
+        if modo != ModoIA.DESLIGADA and not configuracao().gemini_disponivel:
+            _flash(
+                request,
+                "erro",
+                "Configure GEMINI_API_KEY antes de ativar a IA.",
+            )
+            return RedirectResponse(volta, status_code=303)
+        if modo != ModoIA.DESLIGADA and len(objetivo) < 20:
+            _flash(
+                request,
+                "erro",
+                "Descreva o objetivo da conversa com pelo menos 20 caracteres.",
+            )
+            return RedirectResponse(volta, status_code=303)
+        if len(objetivo) > 6000:
+            _flash(request, "erro", "O objetivo da IA deve ter ate 6.000 caracteres.")
+            return RedirectResponse(volta, status_code=303)
+        if not 1 <= limite_respostas_ia <= 20:
+            _flash(request, "erro", "O limite deve ficar entre 1 e 20 respostas.")
+            return RedirectResponse(volta, status_code=303)
+
+        campanha.modo_ia = modo
+        campanha.prompt_ia = objetivo
+        campanha.limite_respostas_ia = limite_respostas_ia
+        sessao.commit()
+        mensagem = {
+            ModoIA.DESLIGADA: "IA desligada para esta campanha.",
+            ModoIA.RASCUNHO: "IA em modo rascunho: uma pessoa aprova antes do envio.",
+            ModoIA.AUTOMATICA: "IA automatica ativada com limite e transferencia humana.",
+        }[modo]
+        _flash(request, "ok", mensagem)
+        return RedirectResponse(volta, status_code=303)
 
     @app.post("/campanhas/{campanha_id}/modelos")
     def campanha_salvar_modelos(
@@ -976,6 +1077,182 @@ def criar_app(
             ),
         )
 
+    # -- inbox de conversas ------------------------------------------------
+
+    @app.get("/conversas", response_class=HTMLResponse)
+    def conversas_lista(
+        request: Request,
+        campanha_id: int | None = None,
+        sessao: Session = Depends(get_sessao),
+        usuario: Usuario = Depends(_exigir_usuario),
+    ) -> Response:
+        consulta = (
+            select(Conversa)
+            .join(Lead, Conversa.lead_id == Lead.id)
+            .join(Campanha, Lead.campanha_id == Campanha.id)
+            .where(Campanha.usuario_id == usuario.id)
+        )
+        if campanha_id is not None:
+            consulta = consulta.where(Campanha.id == campanha_id)
+        conversas = sessao.scalars(
+            consulta.order_by(Conversa.atualizada_em.desc(), Conversa.id.desc())
+        ).all()
+        campanhas = sessao.scalars(
+            select(Campanha)
+            .where(Campanha.usuario_id == usuario.id)
+            .order_by(Campanha.nome)
+        ).all()
+        return templates.TemplateResponse(
+            request,
+            "conversas/lista.html",
+            _ctx(
+                request,
+                usuario,
+                conversas=conversas,
+                campanhas=campanhas,
+                campanha_id=campanha_id,
+            ),
+        )
+
+    @app.get("/conversas/{conversa_id}", response_class=HTMLResponse)
+    def conversa_detalhe(
+        conversa_id: int,
+        request: Request,
+        sessao: Session = Depends(get_sessao),
+        usuario: Usuario = Depends(_exigir_usuario),
+    ) -> Response:
+        conversa = _conversa_do_usuario(sessao, usuario, conversa_id)
+        if conversa is None:
+            _flash(request, "erro", "Conversa nao encontrada.")
+            return RedirectResponse("/conversas", status_code=303)
+        lead = sessao.get(Lead, conversa.lead_id)
+        campanha = sessao.get(Campanha, lead.campanha_id) if lead else None
+        interacoes = sessao.scalars(
+            select(Interacao)
+            .where(Interacao.conversa_id == conversa.id)
+            .order_by(Interacao.id)
+        ).all()
+        return templates.TemplateResponse(
+            request,
+            "conversas/detalhe.html",
+            _ctx(
+                request,
+                usuario,
+                conversa=conversa,
+                lead=lead,
+                campanha=campanha,
+                interacoes=interacoes,
+            ),
+        )
+
+    @app.post("/conversas/{conversa_id}/aprovar/{interacao_id}")
+    def conversa_aprovar_rascunho(
+        conversa_id: int,
+        interacao_id: int,
+        request: Request,
+        csrf: Annotated[str, Form()] = "",
+        sessao: Session = Depends(get_sessao),
+        usuario: Usuario = Depends(_exigir_usuario),
+    ) -> Response:
+        volta = f"/conversas/{conversa_id}"
+        bloqueio = _csrf_ou_volta(request, csrf, volta)
+        if bloqueio:
+            return bloqueio
+        conversa = _conversa_do_usuario(sessao, usuario, conversa_id)
+        interacao = sessao.get(Interacao, interacao_id)
+        if (
+            conversa is None
+            or interacao is None
+            or interacao.conversa_id != conversa.id
+            or interacao.autor != AutorInteracao.IA
+            or interacao.status != StatusInteracao.RASCUNHO
+        ):
+            _flash(request, "erro", "Rascunho nao encontrado.")
+            return RedirectResponse(volta, status_code=303)
+        resultado = app.state.conversa.aprovar(interacao.id)  # type: ignore[attr-defined]
+        if resultado.acao == "enviada":
+            _flash(request, "ok", "Resposta aprovada e enviada.")
+        else:
+            _flash(request, "erro", resultado.motivo or "Nao foi possivel enviar.")
+        return RedirectResponse(volta, status_code=303)
+
+    @app.post("/conversas/{conversa_id}/responder")
+    def conversa_responder_manual(
+        conversa_id: int,
+        request: Request,
+        texto: Annotated[str, Form()],
+        csrf: Annotated[str, Form()] = "",
+        sessao: Session = Depends(get_sessao),
+        usuario: Usuario = Depends(_exigir_usuario),
+    ) -> Response:
+        volta = f"/conversas/{conversa_id}"
+        bloqueio = _csrf_ou_volta(request, csrf, volta)
+        if bloqueio:
+            return bloqueio
+        conversa = _conversa_do_usuario(sessao, usuario, conversa_id)
+        lead = sessao.get(Lead, conversa.lead_id) if conversa else None
+        if conversa is None:
+            _flash(request, "erro", "Conversa nao encontrada.")
+            return RedirectResponse("/conversas", status_code=303)
+        if lead is not None and lead.status == StatusLead.OPTOUT:
+            _flash(request, "erro", "Este contato pediu opt-out. Nenhuma mensagem foi enviada.")
+            return RedirectResponse(volta, status_code=303)
+        resultado = app.state.conversa.enviar_manual(  # type: ignore[attr-defined]
+            conversa.id, texto
+        )
+        if resultado.acao == "enviada":
+            _flash(request, "ok", "Resposta humana enviada.")
+        else:
+            _flash(request, "erro", resultado.motivo or "Nao foi possivel enviar.")
+        return RedirectResponse(volta, status_code=303)
+
+    @app.post("/conversas/{conversa_id}/reabrir")
+    def conversa_reabrir(
+        conversa_id: int,
+        request: Request,
+        csrf: Annotated[str, Form()] = "",
+        sessao: Session = Depends(get_sessao),
+        usuario: Usuario = Depends(_exigir_usuario),
+    ) -> Response:
+        volta = f"/conversas/{conversa_id}"
+        bloqueio = _csrf_ou_volta(request, csrf, volta)
+        if bloqueio:
+            return bloqueio
+        conversa = _conversa_do_usuario(sessao, usuario, conversa_id)
+        lead = sessao.get(Lead, conversa.lead_id) if conversa else None
+        if conversa is None:
+            return RedirectResponse("/conversas", status_code=303)
+        if lead is not None and lead.status == StatusLead.OPTOUT:
+            _flash(request, "erro", "Nao e possivel reabrir um contato com opt-out.")
+            return RedirectResponse(volta, status_code=303)
+        conversa.status = StatusConversa.ABERTA
+        if conversa.etapa == EtapaConversa.ENCERRADA:
+            conversa.etapa = EtapaConversa.IDENTIFICANDO
+        sessao.commit()
+        _flash(request, "ok", "Conversa reaberta para o proximo retorno.")
+        return RedirectResponse(volta, status_code=303)
+
+    @app.post("/conversas/{conversa_id}/encerrar")
+    def conversa_encerrar(
+        conversa_id: int,
+        request: Request,
+        csrf: Annotated[str, Form()] = "",
+        sessao: Session = Depends(get_sessao),
+        usuario: Usuario = Depends(_exigir_usuario),
+    ) -> Response:
+        volta = f"/conversas/{conversa_id}"
+        bloqueio = _csrf_ou_volta(request, csrf, volta)
+        if bloqueio:
+            return bloqueio
+        conversa = _conversa_do_usuario(sessao, usuario, conversa_id)
+        if conversa is None:
+            return RedirectResponse("/conversas", status_code=303)
+        conversa.status = StatusConversa.ENCERRADA
+        conversa.etapa = EtapaConversa.ENCERRADA
+        sessao.commit()
+        _flash(request, "ok", "Conversa encerrada.")
+        return RedirectResponse(volta, status_code=303)
+
     # -- opt-out ------------------------------------------------------------
 
     @app.get("/optouts", response_class=HTMLResponse)
@@ -1030,6 +1307,7 @@ def criar_app(
     @app.post("/webhook/evolution")
     async def webhook_evolution(
         request: Request,
+        background_tasks: BackgroundTasks,
         sessao: Session = Depends(get_sessao),
     ) -> Response:
         """Recebe eventos da Evolution: resposta de lead e (se vier) entrega.
@@ -1047,13 +1325,43 @@ def criar_app(
 
         resposta = interpretar_webhook(payload)
         if resposta is not None and resposta.e_resposta_de_lead:
-            mod_disparo.processar_resposta_recebida(
+            lead = mod_disparo.processar_resposta_recebida(
                 sessao,
                 nome_instancia=resposta.instancia,
                 numero=resposta.numero,
                 texto=resposta.texto,
             )
-            return JSONResponse({"ok": True, "tipo": "resposta"})
+            if lead is None:
+                return JSONResponse(
+                    {"ok": True, "tipo": "resposta", "lead": False}
+                )
+            entrada = mod_conversa.registrar_entrada(
+                sessao,
+                lead,
+                texto=resposta.texto,
+                id_externo=resposta.id_mensagem,
+            )
+            campanha = sessao.get(Campanha, lead.campanha_id)
+            agendada = bool(
+                entrada.nova
+                and lead.status != StatusLead.OPTOUT
+                and campanha is not None
+                and campanha.modo_ia != ModoIA.DESLIGADA
+            )
+            if agendada:
+                background_tasks.add_task(
+                    app.state.conversa.processar, entrada.interacao_id  # type: ignore[attr-defined]
+                )
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "tipo": "resposta",
+                    "lead": True,
+                    "conversa_id": entrada.conversa_id,
+                    "nova": entrada.nova,
+                    "ia_agendada": agendada,
+                }
+            )
 
         evento = str(payload.get("event") or "").lower().replace("_", ".").replace("-", ".")
 
@@ -1132,6 +1440,20 @@ def _campanha_do_usuario(
     return sessao.scalar(
         select(Campanha).where(
             Campanha.id == campanha_id, Campanha.usuario_id == usuario.id
+        )
+    )
+
+
+def _conversa_do_usuario(
+    sessao: Session, usuario: Usuario, conversa_id: int
+) -> Conversa | None:
+    return sessao.scalar(
+        select(Conversa)
+        .join(Lead, Conversa.lead_id == Lead.id)
+        .join(Campanha, Lead.campanha_id == Campanha.id)
+        .where(
+            Conversa.id == conversa_id,
+            Campanha.usuario_id == usuario.id,
         )
     )
 

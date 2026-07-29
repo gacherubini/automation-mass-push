@@ -1,15 +1,16 @@
 # automation-mass-push
 
 Plataforma de prospecção por WhatsApp. Recebe a planilha de lojas gerada pelo
-scraper do Google Maps, dispara uma primeira mensagem em ritmo controlado e
-acompanha quem respondeu.
+scraper do Google Maps, distribui variações da primeira mensagem em ritmo
+controlado, compara os resultados e organiza as respostas em uma inbox com
+Gemini opcional.
 
 Cada usuário loga no dashboard e conecta o **próprio** WhatsApp lendo um QR
 code. As mensagens saem do número de quem escaneou.
 
-> **Status Fase 1:** código completo e testado (212 testes). Falta só o
-> disparo real no seu número (QR + volume baixo) para validar em produção
-> local — isso não roda sozinho no CI.
+> **Status:** disparo, experimentos, dashboard e conversa com IA implementados
+> e cobertos por 240 testes. A validação com WhatsApp e Gemini reais deve
+> começar em modo rascunho e baixo volume — integrações externas não rodam no CI.
 
 ---
 
@@ -48,6 +49,14 @@ invariantes do ritmo.
 6. **Opt-out permanente** global por usuário.
 7. **Nunca repetir número** entre campanhas (`JaContatado`).
 8. **Sem retry de envio** — timeout grava falha e segue (reenviar pode duplicar).
+9. **Experimento balanceado** — sorteia entre as variações menos usadas e guarda
+   o texto-base recebido por cada lead.
+10. **Dashboard por abordagem** — compara resposta, decisor, transferência,
+    opt-out e falha por variação.
+11. **Inbox com Gemini** — modos desligado, rascunho ou automático; baixa
+    confiança sempre exige revisão humana.
+12. **Conversa segura** — histórico idempotente, limite de respostas, opt-out,
+    handoff e resposta manual no mesmo lugar.
 
 ### Aviso
 
@@ -100,6 +109,18 @@ EVOLUTION_API_KEY=...cole-aqui...
 
 Sem essas duas o `docker compose` recusa subir (de propósito).
 
+Para usar a conversa com IA, crie também uma chave no Google AI Studio:
+
+```bash
+GEMINI_API_KEY=...cole-aqui...
+GEMINI_MODEL=gemini-2.5-flash-lite
+```
+
+Sem essa chave, campanhas e inbox continuam funcionando, mas a interface não
+deixa ativar os modos de IA. A modalidade gratuita pode usar conteúdo para
+melhorar produtos do Google; use dados sintéticos nos testes e revise os termos
+ou uma modalidade paga antes de enviar conversas reais de clientes.
+
 ### 3. Subir banco + Evolution
 
 ```bash
@@ -135,6 +156,9 @@ Abra http://localhost:8000
    (separe variações com uma linha `---`)
 5. Ajuste o **ritmo** se quiser (o padrão é conservador)
 6. **Iniciar disparo** e acompanhe o progresso na própria tela
+7. Na campanha, compare as variações em **Qual mensagem funciona melhor?**
+8. Configure **Conversa depois da resposta** primeiro como **Rascunho**
+9. Revise sugestões, transferências e erros em **Conversas**
 
 ### 6. Webhook (respostas e freio)
 
@@ -152,7 +176,8 @@ WEBHOOK_GLOBAL_URL=http://host.docker.internal:8000/webhook/evolution
 
 Depois: `docker compose up -d evolution-api`
 
-Sem webhook, respostas e bloqueios não voltam — o freio de reputação fica cego.
+Sem webhook, respostas e bloqueios não voltam — o freio de reputação, a inbox e
+a IA ficam cegos.
 
 ### 7. Testes
 
@@ -160,8 +185,9 @@ Sem webhook, respostas e bloqueios não voltam — o freio de reputação fica c
 python -m pytest tests/ -q
 ```
 
-Tudo que não precisa de WhatsApp real está coberto (telefone, ritmo, planilha,
-mensagem, models, Evolution com mock, auth, rotas, motor de disparo, webhook).
+Tudo que não precisa de WhatsApp/Gemini reais está coberto (telefone, ritmo,
+planilha, mensagens, distribuição das variações, métricas, models, Evolution e
+Gemini com mock, auth, inbox, rotas, motor de disparo e webhook idempotente).
 
 ### Disparo real de baixo volume (checklist manual)
 
@@ -181,14 +207,17 @@ app/
   telefone.py    normalização BR → E.164
   ritmo.py       aquecimento, tetos, janela, freio
   planilha.py    import .xlsx do scraper
-  mensagem.py    modelos com lacunas + prévia
+  mensagem.py    modelos com lacunas + prévia + identificação da variação
   config.py      variáveis de ambiente
   db.py          engine / sessão
   models.py      7 entidades
   evolution.py   cliente HTTP Evolution API v2
   auth.py        argon2 + sessão/CSRF
-  disparo.py     motor (ritmo + WA check + envio + worker)
-  main.py        dashboard + webhook
+  disparo.py     motor (ritmo + WA check + distribuição balanceada + worker)
+  gemini.py      adaptador HTTP + contrato estruturado da decisão
+  conversa.py    orquestra histórico, IA, aprovação, envio e handoff
+  resultados.py métricas gerais e por variação
+  main.py        dashboard + inbox + webhook
 docker-compose.yml
 alembic/
 tests/

@@ -2,11 +2,10 @@
 #
 # `docker compose up` sobe postgres + evolution-api, que e o suficiente para
 # rodar a aplicacao na mao (uvicorn no host) e ler o QR code. O servico `app`
-# esta atras de um profile porque depende de um Dockerfile que ainda nao existe
-# neste repositorio - sem o profile, ele nao atrapalha quem so quer o banco:
+# fica atras de um profile para quem prefere rodar e depurar o uvicorn no host:
 #
 #   docker compose up -d                  # postgres + evolution
-#   docker compose --profile app up -d    # tudo, depois que o Dockerfile existir
+#   docker compose --profile app up -d    # tudo em containers
 
 name: automation-mass-push
 
@@ -93,7 +92,7 @@ services:
       # Webhook global: e por aqui que a entrega, a resposta e o opt-out chegam
       # de volta. Sem isso as taxas do freio de reputacao ficam sempre em zero.
       WEBHOOK_GLOBAL_ENABLED: ${WEBHOOK_GLOBAL_ENABLED:-false}
-      WEBHOOK_GLOBAL_URL: ${WEBHOOK_GLOBAL_URL:-http://app:8000/webhook/evolution}
+      WEBHOOK_GLOBAL_URL: ${WEBHOOK_GLOBAL_URL:-http://host.docker.internal:8000/webhook/evolution}
       WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS: "false"
 
       LOG_LEVEL: ${EVOLUTION_LOG_LEVEL:-ERROR,WARN,INFO}
@@ -106,9 +105,6 @@ services:
 
   app:
     profiles: ["app"]
-    # O Dockerfile ainda nao existe neste repositorio - crie antes de usar o
-    # profile. Algo como: python:3.14-slim, pip install -r requirements.txt,
-    # uvicorn app.main:app --host 0.0.0.0 --port 8000.
     build:
       context: .
       dockerfile: Dockerfile
@@ -126,6 +122,9 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-mass_push}
       EVOLUTION_URL: http://evolution-api:8080
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:?defina EVOLUTION_API_KEY no .env}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash-lite}
+      GEMINI_URL: ${GEMINI_URL:-https://generativelanguage.googleapis.com/v1beta}
       SECRET_KEY: ${SECRET_KEY:?defina SECRET_KEY no .env}
       AMBIENTE: ${AMBIENTE:-desenvolvimento}
       DEBUG_SQL: ${DEBUG_SQL:-false}

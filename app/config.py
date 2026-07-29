@@ -101,6 +101,12 @@ class Configuracao:
     evolution_url: str = "http://localhost:8080"
     evolution_api_key: str = CHAVE_EVOLUTION_PADRAO
 
+    # Conversa com IA. Sem chave, o recurso fica indisponivel e o restante da
+    # aplicacao continua funcionando normalmente.
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash-lite"
+    gemini_url: str = "https://generativelanguage.googleapis.com/v1beta"
+
     # `echo` do SQLAlchemy. Util para ver a query que o ritmo dispara; barulhento
     # demais para deixar ligado.
     debug_sql: bool = False
@@ -119,6 +125,10 @@ class Configuracao:
     @property
     def producao(self) -> bool:
         return self.ambiente.lower().startswith("prod")
+
+    @property
+    def gemini_disponivel(self) -> bool:
+        return bool(self.gemini_api_key)
 
 
 def _avisos_de_producao(
@@ -158,6 +168,12 @@ def configuracao() -> Configuracao:
         secret_key=secret_key,
         evolution_url=_texto("EVOLUTION_URL", "http://localhost:8080").rstrip("/"),
         evolution_api_key=evolution_api_key,
+        gemini_api_key=_texto("GEMINI_API_KEY", ""),
+        gemini_model=_texto("GEMINI_MODEL", "gemini-2.5-flash-lite"),
+        gemini_url=_texto(
+            "GEMINI_URL",
+            "https://generativelanguage.googleapis.com/v1beta",
+        ).rstrip("/"),
         debug_sql=_booleano("DEBUG_SQL", False),
         pool_size=_inteiro("POOL_SIZE", 5),
         pool_max_overflow=_inteiro("POOL_MAX_OVERFLOW", 10),

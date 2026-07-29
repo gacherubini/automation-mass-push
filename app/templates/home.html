@@ -2,7 +2,23 @@
 {% block title %}Início — Prospecção{% endblock %}
 {% block content %}
 <h1>Olá, {{ usuario.nome }}</h1>
-<p class="lead">Conecte o WhatsApp, suba a planilha do Maps e dispare com ritmo humano.</p>
+<p class="lead">Acompanhe as campanhas, compare as mensagens e assuma as conversas que precisam de você.</p>
+
+{% if resumo.aguardando_humano %}
+<a class="attention-card" href="/conversas">
+  <strong>{{ resumo.aguardando_humano }} conversa(s) precisam de atenção</strong>
+  <span>Revisar rascunhos, erros e transferências →</span>
+</a>
+{% endif %}
+
+<div class="kpi-grid" aria-label="Resumo dos resultados">
+  <div class="kpi"><span>Mensagens enviadas</span><strong>{{ resumo.enviadas }}</strong></div>
+  <div class="kpi"><span>Respostas</span><strong>{{ resumo.respostas }}</strong></div>
+  <div class="kpi"><span>Taxa de resposta</span><strong>{{ resumo.taxa_resposta }}%</strong></div>
+  <div class="kpi"><span>Decisores encontrados</span><strong>{{ resumo.decisores }}</strong></div>
+  <div class="kpi"><span>Leads</span><strong>{{ resumo.leads }}</strong></div>
+  <div class="kpi"><span>Opt-outs</span><strong>{{ resumo.optouts }}</strong></div>
+</div>
 
 <div class="grid-2">
   <section class="card">
@@ -33,7 +49,7 @@
   </section>
 </div>
 
-<section class="card">
+<section class="card" id="campanhas">
   <h2>Campanhas</h2>
   {% if campanhas %}
   <div class="table-wrap">
@@ -42,6 +58,7 @@
         <tr>
           <th>Nome</th>
           <th>Status</th>
+          <th>IA após resposta</th>
           <th>Teto/dia</th>
           <th></th>
         </tr>
@@ -51,6 +68,7 @@
         <tr>
           <td>{{ c.nome }}</td>
           <td><span class="badge {{ c.status.value }}">{{ c.status.value }}</span></td>
+          <td><span class="badge {{ c.modo_ia.value }}">{{ c.modo_ia.value }}</span></td>
           <td>{{ c.teto_diario }}</td>
           <td><a href="/campanhas/{{ c.id }}">Abrir</a></td>
         </tr>

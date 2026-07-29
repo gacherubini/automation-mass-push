@@ -188,6 +188,14 @@ class TestSorteioDeVariacao:
         assert "Bicho Mania" in texto
         assert "{" not in texto
 
+    def test_escolha_carrega_indice_modelo_e_texto(self):
+        escolha = mensagem.escolher_para(
+            MODELOS, BICHO_MANIA, random.Random(3)
+        )
+        assert escolha.indice >= 1
+        assert escolha.modelo == MODELOS[escolha.indice - 1]
+        assert "Bicho Mania" in escolha.texto
+
 
 class TestPrevia:
     def test_devolve_uma_mensagem_por_lead(self):

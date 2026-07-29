@@ -38,6 +38,10 @@ if (-not $dockerOk) {
 }
 
 Write-Host "docker compose up -d ..."
+# Este launcher roda o FastAPI no Windows, fora do container. Forca o webhook
+# da Evolution a voltar para o host; sem isso respostas nao chegam a inbox.
+$env:WEBHOOK_GLOBAL_ENABLED = "true"
+$env:WEBHOOK_GLOBAL_URL = "http://host.docker.internal:8000/webhook/evolution"
 docker compose up -d
 if ($LASTEXITCODE -ne 0) {
   Write-Host "ERRO no docker compose" -ForegroundColor Red

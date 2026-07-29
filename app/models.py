@@ -2,6 +2,8 @@
 
 O desenho segue a arvore de posse: um usuario tem conexoes (WhatsApps ligados
 por QR) e campanhas; a campanha tem leads (as lojas da planilha) e mensagens.
+Cada lead pode ter uma conversa, formada pelas interacoes recebidas, sugeridas
+pela IA ou enviadas por uma pessoa.
 Fora dessa arvore ficam duas listas GLOBAIS por usuario - OptOut e JaContatado -
 que valem entre campanhas e entre planilhas, porque "nao mandar de novo" e uma
 promessa do usuario para o mercado dele, nao um detalhe de uma campanha.
@@ -129,6 +131,48 @@ class StatusEntrega(StrEnum):
     BLOQUEADA = "bloqueada"
 
 
+class ModoIA(StrEnum):
+    """Quanto a IA pode fazer em uma campanha."""
+
+    DESLIGADA = "desligada"
+    RASCUNHO = "rascunho"
+    AUTOMATICA = "automatica"
+
+
+class StatusConversa(StrEnum):
+    ABERTA = "aberta"
+    AGUARDANDO_HUMANO = "aguardando_humano"
+    ENCERRADA = "encerrada"
+    ERRO = "erro"
+
+
+class PapelContato(StrEnum):
+    DESCONHECIDO = "desconhecido"
+    ATENDENTE = "atendente"
+    DECISOR = "decisor"
+
+
+class EtapaConversa(StrEnum):
+    IDENTIFICANDO = "identificando"
+    BUSCANDO_DECISOR = "buscando_decisor"
+    QUALIFICANDO = "qualificando"
+    TRANSFERINDO = "transferindo"
+    ENCERRADA = "encerrada"
+
+
+class AutorInteracao(StrEnum):
+    LEAD = "lead"
+    IA = "ia"
+    HUMANO = "humano"
+
+
+class StatusInteracao(StrEnum):
+    RECEBIDA = "recebida"
+    RASCUNHO = "rascunho"
+    ENVIADA = "enviada"
+    FALHOU = "falhou"
+
+
 # Chegou ao aparelho. E o denominador das taxas do ritmo: mensagem que nao
 # chegou nao diz nada sobre a qualidade do texto.
 ENTREGUES = (StatusEntrega.ENTREGUE, StatusEntrega.LIDA, StatusEntrega.BLOQUEADA)
@@ -247,6 +291,10 @@ class Campanha(Base):
         CheckConstraint("intervalo_min_seg > 0", name="intervalo_min_positivo"),
         CheckConstraint("intervalo_max_seg >= intervalo_min_seg", name="intervalo_coerente"),
         CheckConstraint("teto_diario > 0", name="teto_positivo"),
+        CheckConstraint(
+            "limite_respostas_ia > 0 AND limite_respostas_ia <= 20",
+            name="limite_respostas_ia_valido",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -271,6 +319,19 @@ class Campanha(Base):
     # hora e um dos sinais de spam mais faceis de detectar, entao a campanha
     # guarda varias e o envio sorteia. O texto REAL sorteado fica em Mensagem.
     modelos: Mapped[list[str]] = mapped_column(JSON_PORTATIL, nullable=False, default=list)
+
+    # A IA so entra depois que o lead responde. RASCUNHO e o modo de validacao:
+    # gera a sugestao, mas uma pessoa precisa aprovar na inbox.
+    modo_ia: Mapped[ModoIA] = mapped_column(
+        _coluna_enum(ModoIA, "modo_ia"),
+        nullable=False,
+        default=ModoIA.DESLIGADA,
+        server_default=ModoIA.DESLIGADA.value,
+    )
+    prompt_ia: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    limite_respostas_ia: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=4, server_default="4"
+    )
 
     # --- perfil de ritmo (espelha ritmo.Perfil) ---
     teto_diario: Mapped[int] = mapped_column(Integer, nullable=False, default=40, server_default="40")
@@ -387,6 +448,12 @@ class Lead(Base):
     mensagens: Mapped[list[Mensagem]] = relationship(
         back_populates="lead", cascade="all, delete-orphan", passive_deletes=True
     )
+    conversa: Mapped[Conversa | None] = relationship(
+        back_populates="lead",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        uselist=False,
+    )
 
     def __repr__(self) -> str:
         return f"<Lead {self.id} {self.nome!r} {self.status}>"
@@ -419,6 +486,10 @@ class Mensagem(Base):
         ForeignKey("campanha.id", ondelete="CASCADE"), nullable=False
     )
     texto: Mapped[str] = mapped_column(Text, nullable=False)
+    # Snapshot da variacao da primeira mensagem. O indice ajuda a interface; o
+    # texto-base mantem a metrica correta mesmo se os modelos forem editados.
+    variante_indice: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    variante_texto: Mapped[str | None] = mapped_column(Text, nullable=True)
     enviada_em: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_agora, server_default=func.now()
     )
@@ -440,6 +511,94 @@ class Mensagem(Base):
 
     def __repr__(self) -> str:
         return f"<Mensagem {self.id} lead={self.lead_id} {self.status_entrega}>"
+
+
+class Conversa(Base):
+    """Estado conversacional de um lead depois da primeira resposta."""
+
+    __tablename__ = "conversa"
+    __table_args__ = (
+        UniqueConstraint("lead_id", name="uq_conversa_lead_id"),
+        Index("ix_conversa_status_atualizada", "status", "atualizada_em"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    lead_id: Mapped[int] = mapped_column(
+        ForeignKey("lead.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[StatusConversa] = mapped_column(
+        _coluna_enum(StatusConversa, "status_conversa"),
+        nullable=False,
+        default=StatusConversa.ABERTA,
+        server_default=StatusConversa.ABERTA.value,
+    )
+    papel_contato: Mapped[PapelContato] = mapped_column(
+        _coluna_enum(PapelContato, "papel_contato"),
+        nullable=False,
+        default=PapelContato.DESCONHECIDO,
+        server_default=PapelContato.DESCONHECIDO.value,
+    )
+    etapa: Mapped[EtapaConversa] = mapped_column(
+        _coluna_enum(EtapaConversa, "etapa_conversa"),
+        nullable=False,
+        default=EtapaConversa.IDENTIFICANDO,
+        server_default=EtapaConversa.IDENTIFICANDO.value,
+    )
+    resumo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    total_respostas_ia: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    criada_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_agora, server_default=func.now()
+    )
+    atualizada_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_agora, server_default=func.now()
+    )
+
+    lead: Mapped[Lead] = relationship(back_populates="conversa")
+    interacoes: Mapped[list[Interacao]] = relationship(
+        back_populates="conversa",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="Interacao.id",
+    )
+
+
+class Interacao(Base):
+    """Uma fala do lead, uma sugestao da IA ou uma resposta humana."""
+
+    __tablename__ = "interacao"
+    __table_args__ = (
+        UniqueConstraint("id_externo", name="uq_interacao_id_externo"),
+        UniqueConstraint(
+            "origem_interacao_id", name="uq_interacao_origem_interacao_id"
+        ),
+        Index("ix_interacao_conversa_criada", "conversa_id", "criada_em"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    conversa_id: Mapped[int] = mapped_column(
+        ForeignKey("conversa.id", ondelete="CASCADE"), nullable=False
+    )
+    # Liga a sugestao/resposta automatica a mensagem recebida que a originou.
+    # A unique impede dois workers de responderem o mesmo webhook.
+    origem_interacao_id: Mapped[int | None] = mapped_column(
+        ForeignKey("interacao.id", ondelete="SET NULL"), nullable=True
+    )
+    autor: Mapped[AutorInteracao] = mapped_column(
+        _coluna_enum(AutorInteracao, "autor_interacao"), nullable=False
+    )
+    status: Mapped[StatusInteracao] = mapped_column(
+        _coluna_enum(StatusInteracao, "status_interacao"), nullable=False
+    )
+    texto: Mapped[str] = mapped_column(Text, nullable=False)
+    id_externo: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    erro: Mapped[str | None] = mapped_column(Text, nullable=True)
+    criada_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_agora, server_default=func.now()
+    )
+
+    conversa: Mapped[Conversa] = relationship(back_populates="interacoes")
 
 
 class OptOut(Base):
@@ -506,16 +665,24 @@ class JaContatado(Base):
 __all__ = [
     "ABERTOS",
     "ENTREGUES",
+    "AutorInteracao",
     "Base",
     "Campanha",
     "Conexao",
+    "Conversa",
+    "EtapaConversa",
+    "Interacao",
     "JaContatado",
     "Lead",
     "Mensagem",
+    "ModoIA",
     "OptOut",
+    "PapelContato",
     "StatusCampanha",
     "StatusConexao",
+    "StatusConversa",
     "StatusEntrega",
+    "StatusInteracao",
     "StatusLead",
     "Usuario",
 ]
