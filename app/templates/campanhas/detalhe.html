@@ -348,6 +348,24 @@
   </p>
 </section>
 
+<section class="card danger-border" id="zona-perigo">
+  <h2>Apagar campanha</h2>
+  <p class="muted small">
+    Remove esta campanha, seus leads, mensagens e conversas. A lista de opt-out
+    e a memória de telefones já contatados continuam preservadas.
+  </p>
+  {% if campanha.status.value == 'rodando' %}
+  <p class="small" style="color:var(--warn)">Pause o disparo antes de apagar.</p>
+  {% endif %}
+  <form method="post" action="/campanhas/{{ campanha.id }}/apagar"
+        onsubmit="return confirm('Apagar definitivamente a campanha {{ campanha.nome|e }} e todo o histórico dela?');">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="btn btn-danger" type="submit" {% if campanha.status.value == 'rodando' %}disabled{% endif %}>
+      Apagar campanha
+    </button>
+  </form>
+</section>
+
 <script>
 (() => {
   // --- templates de mensagem ---

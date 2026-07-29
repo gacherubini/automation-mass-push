@@ -6,7 +6,7 @@ Ele existe para você não re-decidir o que já foi decidido nem repetir erro j�
 cometido.
 
 Última atualização: 2026-07-29. Disparo, experimentos de mensagem, dashboard e
-conversa com Gemini estão implementados. A suíte tem 240 testes passando; falta
+conversa com Gemini estão implementados. A suíte tem 242 testes passando; falta
 validar Gemini + WhatsApp reais em modo rascunho e aplicar a nova migração com o
 Docker Desktop ligado.
 

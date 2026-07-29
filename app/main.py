@@ -1031,6 +1031,40 @@ def criar_app(
             _flash(request, "ok", "Campanha pausada. Pode retomar sem reenviar o que ja saiu.")
         return RedirectResponse(volta, status_code=303)
 
+    @app.post("/campanhas/{campanha_id}/apagar")
+    def campanha_apagar(
+        campanha_id: int,
+        request: Request,
+        csrf: Annotated[str, Form()] = "",
+        sessao: Session = Depends(get_sessao),
+        usuario: Usuario = Depends(_exigir_usuario),
+    ) -> Response:
+        volta = f"/campanhas/{campanha_id}"
+        bloqueio = _csrf_ou_volta(request, csrf, volta)
+        if bloqueio:
+            return bloqueio
+        campanha = _campanha_do_usuario(sessao, usuario, campanha_id)
+        if campanha is None:
+            _flash(request, "erro", "Campanha nao encontrada.")
+            return RedirectResponse("/app", status_code=303)
+        if campanha.status == StatusCampanha.RODANDO:
+            _flash(
+                request,
+                "erro",
+                "Pause a campanha antes de apagar. Isso evita um envio durante a exclusao.",
+            )
+            return RedirectResponse(volta, status_code=303)
+
+        nome = campanha.nome
+        sessao.delete(campanha)
+        sessao.commit()
+        _flash(
+            request,
+            "ok",
+            f"Campanha {nome!r} apagada. Opt-outs e telefones ja contatados foram preservados.",
+        )
+        return RedirectResponse("/app", status_code=303)
+
     @app.get("/campanhas/{campanha_id}/progresso")
     def campanha_progresso(
         campanha_id: int,

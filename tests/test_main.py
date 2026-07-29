@@ -24,9 +24,11 @@ from app.models import (
     Conexao,
     Conversa,
     Interacao,
+    JaContatado,
     Lead,
     Mensagem,
     ModoIA,
+    OptOut,
     StatusCampanha,
     StatusConexao,
     StatusConversa,
@@ -449,6 +451,95 @@ class TestCampanha:
         assert resposta.status_code == 303
         with fabrica() as s:
             assert s.get(Campanha, campanha_id).modo_ia == ModoIA.DESLIGADA
+
+    def test_apaga_campanha_e_preserva_bloqueios_globais(
+        self, client: TestClient, fabrica
+    ):
+        self._login(client, fabrica)
+        with fabrica() as s:
+            usuario = s.scalar(select(Usuario))
+            campanha = Campanha(
+                usuario_id=usuario.id,
+                nome="Campanha descartavel",
+                modelos=["Oi"],
+                status=StatusCampanha.PAUSADA,
+            )
+            s.add(campanha)
+            s.flush()
+            lead = Lead(
+                campanha_id=campanha.id,
+                nome="Loja",
+                telefone="5551999999911",
+                status=StatusLead.RESPONDEU,
+            )
+            s.add(lead)
+            s.flush()
+            conversa = Conversa(lead_id=lead.id)
+            mensagem = Mensagem(
+                lead_id=lead.id,
+                campanha_id=campanha.id,
+                texto="Oi",
+                status_entrega=StatusEntrega.ENVIADA,
+            )
+            memoria = JaContatado(
+                usuario_id=usuario.id,
+                telefone=lead.telefone,
+                campanha_id=campanha.id,
+            )
+            optout = OptOut(
+                usuario_id=usuario.id,
+                telefone="5551999999922",
+                motivo="parar",
+            )
+            s.add_all([conversa, mensagem, memoria, optout])
+            s.commit()
+            ids = (campanha.id, lead.id, conversa.id, mensagem.id, memoria.id, optout.id)
+
+        pagina = client.get(f"/campanhas/{ids[0]}")
+        assert "Apagar campanha" in pagina.text
+        resposta = client.post(
+            f"/campanhas/{ids[0]}/apagar",
+            data={"csrf": _csrf(pagina.text)},
+            follow_redirects=False,
+        )
+
+        assert resposta.status_code == 303
+        assert resposta.headers["location"] == "/app"
+        with fabrica() as s:
+            assert s.get(Campanha, ids[0]) is None
+            assert s.get(Lead, ids[1]) is None
+            assert s.get(Conversa, ids[2]) is None
+            assert s.get(Mensagem, ids[3]) is None
+            memoria = s.get(JaContatado, ids[4])
+            assert memoria is not None
+            assert memoria.campanha_id is None
+            assert s.get(OptOut, ids[5]) is not None
+
+    def test_nao_apaga_campanha_rodando(self, client: TestClient, fabrica):
+        self._login(client, fabrica)
+        with fabrica() as s:
+            usuario = s.scalar(select(Usuario))
+            campanha = Campanha(
+                usuario_id=usuario.id,
+                nome="Em andamento",
+                modelos=["Oi"],
+                status=StatusCampanha.RODANDO,
+            )
+            s.add(campanha)
+            s.commit()
+            campanha_id = campanha.id
+
+        pagina = client.get(f"/campanhas/{campanha_id}")
+        resposta = client.post(
+            f"/campanhas/{campanha_id}/apagar",
+            data={"csrf": _csrf(pagina.text)},
+            follow_redirects=False,
+        )
+
+        assert resposta.status_code == 303
+        assert resposta.headers["location"] == f"/campanhas/{campanha_id}"
+        with fabrica() as s:
+            assert s.get(Campanha, campanha_id) is not None
 
 
 class TestWebhook:
