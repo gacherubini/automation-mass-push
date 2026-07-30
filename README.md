@@ -158,7 +158,8 @@ Abra http://localhost:8000
 5. Ajuste o **ritmo** se quiser (o padrão é conservador)
 6. **Iniciar disparo** e acompanhe o progresso na própria tela
 7. Na campanha, compare os textos em **Desempenho das mensagens**
-8. Configure **Conversa depois da resposta** primeiro como **Rascunho**
+8. Em **Respostas com IA**, cadastre um trabalho real e seu link de agendamento;
+   comece no modo **Rascunho** para revisar a abordagem
 9. Revise sugestões, transferências e erros em **Conversas**
 
 ### 6. Webhook (respostas e freio)

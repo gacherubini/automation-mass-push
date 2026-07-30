@@ -436,6 +436,8 @@ class TestCampanha:
         assert "Uma mensagem" in pagina.text
         assert "Mensagens variadas" in pagina.text
         assert "2. Respostas com IA" in pagina.text
+        assert "Trabalho que você já fez" in pagina.text
+        assert "Link para marcar a reunião" in pagina.text
         csrf = _csrf(pagina.text)
 
         resposta = client.post(
@@ -443,7 +445,12 @@ class TestCampanha:
             data={
                 "csrf": csrf,
                 "modo_ia": "rascunho",
-                "prompt_ia": "Descobrir quem decide e transferir quando houver interesse.",
+                "prompt_ia": "Apresentar o trabalho realizado e oferecer uma conversa breve.",
+                "case_ia": (
+                    "Criei uma automação que organiza os contatos recebidos "
+                    "e avisa a equipe quando alguém precisa de atendimento."
+                ),
+                "link_agendamento": "https://calendly.com/gabriel/conversa",
                 "limite_respostas_ia": "3",
             },
             follow_redirects=False,
@@ -453,7 +460,48 @@ class TestCampanha:
             campanha = s.get(Campanha, campanha_id)
             assert campanha.modo_ia == ModoIA.RASCUNHO
             assert campanha.limite_respostas_ia == 3
-            assert "quem decide" in campanha.prompt_ia
+            assert "trabalho realizado" in campanha.prompt_ia
+            assert "organiza os contatos" in campanha.case_ia
+            assert campanha.link_agendamento == "https://calendly.com/gabriel/conversa"
+
+    def test_nao_ativa_ia_sem_case_real_e_link(
+        self, client: TestClient, fabrica, monkeypatch
+    ):
+        self._login(client, fabrica)
+        with fabrica() as s:
+            usuario = s.scalar(select(Usuario))
+            campanha = Campanha(
+                usuario_id=usuario.id,
+                nome="Sem case",
+                modelos=["Oi, {nome}!"],
+            )
+            s.add(campanha)
+            s.commit()
+            campanha_id = campanha.id
+
+        monkeypatch.setattr(
+            "app.main.configuracao",
+            lambda: Configuracao(gemini_api_key="chave-de-teste"),
+        )
+        pagina = client.get(f"/campanhas/{campanha_id}")
+        resposta = client.post(
+            f"/campanhas/{campanha_id}/ia",
+            data={
+                "csrf": _csrf(pagina.text),
+                "modo_ia": "automatica",
+                "prompt_ia": "Apresentar o trabalho e oferecer uma reuniao breve.",
+                "case_ia": "",
+                "link_agendamento": "",
+                "limite_respostas_ia": "4",
+            },
+            follow_redirects=False,
+        )
+        assert resposta.status_code == 303
+        with fabrica() as s:
+            campanha = s.get(Campanha, campanha_id)
+            assert campanha.modo_ia == ModoIA.DESLIGADA
+            assert campanha.case_ia == ""
+            assert campanha.link_agendamento == ""
 
     def test_nao_ativa_ia_sem_chave(self, client: TestClient, fabrica, monkeypatch):
         self._login(client, fabrica)

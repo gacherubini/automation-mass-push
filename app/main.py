@@ -15,6 +15,7 @@ from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any
+from urllib.parse import urlparse
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
@@ -86,11 +87,11 @@ logger = logging.getLogger(__name__)
 # Nome da instancia Evolution: so [a-zA-Z0-9_-], ate 100 chars (models).
 _RE_INSTANCIA = re.compile(r"[^a-zA-Z0-9_-]+")
 PROMPT_IA_PADRAO = (
-    "Representamos uma consultoria de automacoes de IA para pequenos negocios. "
-    "Converse de forma breve e educada. Descubra se a pessoa que respondeu "
-    "cuida de atendimento, processos ou tecnologia. Se nao for, pergunte como "
-    "falar com o responsavel. Entenda uma tarefa repetitiva e, quando houver "
-    "interesse, convide para uma reuniao de 15 minutos e transfira para o time."
+    "Apresente Gabriel como consultor de automacoes de IA para pequenos negocios. "
+    "Confirme apenas se a pessoa e responsavel ou pode encaminhar o contato. "
+    "Mostre o exemplo real cadastrado, relacione-o ao segmento sem inventar "
+    "resultados e convide para uma conversa breve usando o link de agendamento. "
+    "Nao investigue tarefas repetitivas, processos internos, dores ou problemas."
 )
 
 
@@ -808,6 +809,8 @@ def criar_app(
         request: Request,
         modo_ia: Annotated[str, Form()] = ModoIA.DESLIGADA.value,
         prompt_ia: Annotated[str, Form()] = "",
+        case_ia: Annotated[str, Form()] = "",
+        link_agendamento: Annotated[str, Form()] = "",
         limite_respostas_ia: Annotated[int, Form()] = 4,
         csrf: Annotated[str, Form()] = "",
         sessao: Session = Depends(get_sessao),
@@ -826,12 +829,31 @@ def criar_app(
             _flash(request, "erro", "Modo da IA invalido.")
             return RedirectResponse(volta, status_code=303)
 
-        objetivo = prompt_ia.strip()
+        objetivo = prompt_ia.strip() or PROMPT_IA_PADRAO
+        exemplo_real = case_ia.strip()
+        link_reuniao = link_agendamento.strip()
         if modo != ModoIA.DESLIGADA and not configuracao().gemini_disponivel:
             _flash(
                 request,
                 "erro",
                 "Configure GEMINI_API_KEY antes de ativar a IA.",
+            )
+            return RedirectResponse(volta, status_code=303)
+        if modo != ModoIA.DESLIGADA and len(exemplo_real) < 20:
+            _flash(
+                request,
+                "erro",
+                "Descreva um trabalho real que a IA pode apresentar.",
+            )
+            return RedirectResponse(volta, status_code=303)
+        link_partes = urlparse(link_reuniao)
+        if modo != ModoIA.DESLIGADA and not (
+            link_partes.scheme in {"http", "https"} and link_partes.netloc
+        ):
+            _flash(
+                request,
+                "erro",
+                "Informe um link completo de agendamento, começando com https://.",
             )
             return RedirectResponse(volta, status_code=303)
         if modo != ModoIA.DESLIGADA and len(objetivo) < 20:
@@ -844,12 +866,20 @@ def criar_app(
         if len(objetivo) > 6000:
             _flash(request, "erro", "O objetivo da IA deve ter ate 6.000 caracteres.")
             return RedirectResponse(volta, status_code=303)
+        if len(exemplo_real) > 1500:
+            _flash(request, "erro", "O exemplo real deve ter no máximo 1.500 caracteres.")
+            return RedirectResponse(volta, status_code=303)
+        if len(link_reuniao) > 500:
+            _flash(request, "erro", "O link de agendamento deve ter no máximo 500 caracteres.")
+            return RedirectResponse(volta, status_code=303)
         if not 1 <= limite_respostas_ia <= 20:
             _flash(request, "erro", "O limite deve ficar entre 1 e 20 respostas.")
             return RedirectResponse(volta, status_code=303)
 
         campanha.modo_ia = modo
         campanha.prompt_ia = objetivo
+        campanha.case_ia = exemplo_real
+        campanha.link_agendamento = link_reuniao
         campanha.limite_respostas_ia = limite_respostas_ia
         sessao.commit()
         mensagem = {

@@ -299,6 +299,8 @@ class GerenciadorConversa:
                     categoria=lead.categoria or "",
                     objetivo=campanha.prompt_ia or "",
                     historico=historico,
+                    case_real=campanha.case_ia,
+                    link_agendamento=campanha.link_agendamento,
                 ),
                 conversa.id,
             )

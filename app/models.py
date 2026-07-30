@@ -329,6 +329,10 @@ class Campanha(Base):
         server_default=ModoIA.DESLIGADA.value,
     )
     prompt_ia: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    case_ia: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    link_agendamento: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
     limite_respostas_ia: Mapped[int] = mapped_column(
         Integer, nullable=False, default=4, server_default="4"
     )

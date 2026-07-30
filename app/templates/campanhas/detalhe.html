@@ -166,7 +166,7 @@
   <div class="section-heading">
     <div>
       <h2>2. Respostas com IA</h2>
-      <p class="muted small">Comece em rascunho. A IA sugere e você aprova.</p>
+      <p class="muted small">A IA apresenta seu trabalho, mostra um exemplo real e oferece seu link de reunião.</p>
     </div>
     <a class="btn btn-sm" href="/conversas?campanha_id={{ campanha.id }}">Abrir conversas</a>
   </div>
@@ -202,10 +202,25 @@
         <input type="number" name="limite_respostas_ia" min="1" max="20" value="{{ campanha.limite_respostas_ia }}">
       </label>
     </div>
-    <label>Objetivo da conversa
-      <span class="field-hint">O padrão já busca o responsável e sugere uma reunião de 15 minutos.</span>
-      <textarea name="prompt_ia" rows="7" maxlength="6000">{{ campanha.prompt_ia or prompt_ia_padrao }}</textarea>
-    </label>
+    <div class="grid-2 ai-proof-grid">
+      <label>Trabalho que você já fez
+        <span class="field-hint">Conte apenas um exemplo real que a IA pode apresentar. Não inventaremos resultados.</span>
+        <textarea name="case_ia" rows="5" maxlength="1500" placeholder="Ex.: Criei uma automação que organiza os contatos recebidos e avisa a equipe quando um cliente precisa de atendimento.">{{ campanha.case_ia }}</textarea>
+      </label>
+      <label>Link para marcar a reunião
+        <span class="field-hint">Use seu Calendly, Google Agenda ou outra página de agendamento.</span>
+        <input type="url" name="link_agendamento" maxlength="500" placeholder="https://calendly.com/seu-link" value="{{ campanha.link_agendamento }}">
+      </label>
+    </div>
+    <details class="compact-details">
+      <summary>Instruções adicionais da conversa</summary>
+      <div class="details-content" style="padding:12px">
+        <label>Roteiro da IA
+          <span class="field-hint">O padrão não investiga tarefas repetitivas: apresenta, mostra o case e convida para a reunião.</span>
+          <textarea name="prompt_ia" rows="7" maxlength="6000">{{ campanha.prompt_ia or prompt_ia_padrao }}</textarea>
+        </label>
+      </div>
+    </details>
     <button class="btn btn-primary" type="submit">Salvar configuração da IA</button>
   </form>
 </section>

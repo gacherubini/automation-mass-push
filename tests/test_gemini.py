@@ -16,6 +16,8 @@ def _contexto() -> ContextoIA:
         categoria="Pet shop",
         objetivo="Descobrir quem decide sobre marketing.",
         historico=(("lead", "Oi, sou atendente. Do que se trata?"),),
+        case_real="Automatizei a triagem de contatos de uma loja do mesmo setor.",
+        link_agendamento="https://calendly.com/gabriel/conversa",
     )
 
 
@@ -60,6 +62,11 @@ class TestGemini:
         assert request.url.path.endswith("/models/gemini-teste:generateContent")
         corpo = json.loads(request.content)
         assert corpo["generationConfig"]["responseFormat"]["text"]["mimeType"] == "APPLICATION_JSON"
+        instrucao = corpo["systemInstruction"]["parts"][0]["text"]
+        entrada = corpo["contents"][0]["parts"][0]["text"]
+        assert "Nao investigue tarefas repetitivas" in instrucao
+        assert "Automatizei a triagem" in entrada
+        assert "https://calendly.com/gabriel/conversa" in entrada
 
     def test_sem_chave_falha_antes_da_rede(self):
         gemini = Gemini("", "modelo", "https://gemini.test")

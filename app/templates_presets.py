@@ -12,27 +12,27 @@ from __future__ import annotations
 MODELOS_IA_PEQUENOS_NEGOCIOS: tuple[str, ...] = (
     (
         "Olá, {nome}! Meu nome é Gabriel e trabalho ajudando pequenos negócios "
-        "a simplificar o atendimento e as rotinas com automações de IA. Queria "
-        "entender se isso faz sentido para vocês e, se sim, agendar uma conversa "
-        "breve com o responsável. Você é a pessoa certa para falar sobre isso?"
+        "com automações de IA. Já desenvolvi soluções nessa área e gostaria de "
+        "mostrar um exemplo relacionado ao setor de vocês em uma conversa breve. "
+        "Você é a pessoa responsável para receber meu link de agendamento?"
     ),
     (
-        "Oi, {nome}! Aqui é o Gabriel. Eu ajudo pequenos negócios a simplificar "
-        "o atendimento e as tarefas do dia a dia com automações de IA. Gostaria "
-        "de entender se isso pode ajudar vocês e conversar rapidamente com o "
-        "responsável. Você é a pessoa certa?"
+        "Oi, {nome}! Aqui é o Gabriel. Trabalho com automações de IA para pequenos "
+        "negócios e tenho um projeto que pode servir de exemplo para o setor de "
+        "vocês. Gostaria de apresentá-lo rapidamente e enviar meu link para "
+        "marcarmos uma conversa. Posso falar com o responsável?"
     ),
     (
-        "Olá, tudo bem. Meu nome é Gabriel e trabalho com automações de IA e "
-        "consultoria para pequenos negócios. A ideia é simplificar o atendimento "
-        "e reduzir tarefas repetitivas. Queria marcar uma conversa breve com o "
-        "responsável da {nome}. Posso falar com você?"
+        "Olá, {nome}! Sou o Gabriel e presto consultoria em automações de IA para "
+        "pequenos negócios. Quero mostrar um trabalho que já desenvolvi relacionado "
+        "a esse mercado e convidar o responsável para uma conversa breve. Você é "
+        "a pessoa certa?"
     ),
     (
-        "Bom dia, {nome}! Sou o Gabriel e ajudo pequenos negócios a organizar o "
-        "atendimento e as rotinas usando automações de IA. Queria entender se "
-        "existe algo que possamos simplificar e, se fizer sentido, agendar uma "
-        "conversa curta com o responsável. É com você que devo falar?"
+        "Bom dia, {nome}! Meu nome é Gabriel. Trabalho com automações de IA e "
+        "tenho um exemplo prático relacionado ao setor de vocês que gostaria de "
+        "apresentar. Se houver interesse, envio meu link para escolhermos o melhor "
+        "horário. É com você ou com outro responsável que devo falar?"
     ),
 )
 

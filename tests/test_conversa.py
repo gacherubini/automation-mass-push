@@ -111,7 +111,9 @@ def _cenario(fabrica, modo=ModoIA.RASCUNHO):
             nome="Pets",
             modelos=["Oi"],
             modo_ia=modo,
-            prompt_ia="Descobrir o dono.",
+            prompt_ia="Apresentar o case e oferecer uma reuniao.",
+            case_ia="Automacao de triagem de contatos para uma operacao comercial.",
+            link_agendamento="https://calendly.com/gabriel/conversa",
         )
         s.add(campanha)
         s.flush()
@@ -194,6 +196,8 @@ class TestGerenciador:
         assert primeiro.acao == "enviada"
         assert segundo.acao == "duplicada"
         assert len(evolution.envios) == 1
+        assert ia.contextos[0].case_real.startswith("Automacao de triagem")
+        assert ia.contextos[0].link_agendamento == "https://calendly.com/gabriel/conversa"
         with fabrica() as s:
             conversa = s.get(Conversa, entrada.conversa_id)
             assert conversa.total_respostas_ia == 1

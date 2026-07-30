@@ -67,7 +67,8 @@ Fluxo do usuário, em 10 passos:
 6. Vê a prévia preenchida com lojas reais
 7. Dispara. As mensagens saem devagar; a tela mostra progresso ao vivo
 8. O painel compara qual mensagem gera mais respostas e decisores
-9. Quem responde entra na inbox; Gemini gera rascunho ou responde com limites
+9. Quem responde entra na inbox; Gemini apresenta um case real cadastrado,
+   oferece o link de agendamento e gera rascunho ou responde com limites
 10. Baixa confiança, interesse ou pedido de pessoa transfere para o humano
 
 A planilha de entrada vem do projeto irmão
