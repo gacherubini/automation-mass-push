@@ -3,7 +3,7 @@ import random
 import pytest
 
 from app import mensagem
-from app.templates_presets import MODELOS_IA_PEQUENOS_NEGOCIOS
+from app.templates_presets import MODELOS_IA_PEQUENOS_NEGOCIOS, PRESETS_MENSAGEM
 from app.planilha import Lead
 
 BICHO_MANIA = Lead(
@@ -199,13 +199,17 @@ class TestSorteioDeVariacao:
 
 
 class TestModeloPadraoIA:
-    def test_variacoes_sao_validas_curtas_e_com_uma_pergunta(self):
+    def test_mensagens_sao_individuais_validas_e_proximas_do_texto_base(self):
         mensagem.validar(MODELOS_IA_PEQUENOS_NEGOCIOS)
         assert len(MODELOS_IA_PEQUENOS_NEGOCIOS) == 4
         for modelo in MODELOS_IA_PEQUENOS_NEGOCIOS:
             assert "automações de IA" in modelo
+            assert "Gabriel" in modelo
+            assert "responsável" in modelo
             assert len(modelo) <= 450
             assert modelo.count("?") == 1
+        assert len({preset["id"] for preset in PRESETS_MENSAGEM}) == len(PRESETS_MENSAGEM)
+        assert all("\n---\n" not in preset["texto"] for preset in PRESETS_MENSAGEM)
 
 
 class TestPrevia:

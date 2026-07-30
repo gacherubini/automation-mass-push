@@ -6,94 +6,60 @@ So dados para a tela — o disparo nao importa daqui.
 from __future__ import annotations
 
 # ---------------------------------------------------------------------------
-# Mensagens: packs de variacoes separadas por ---
+# Mensagens prontas para o usuario escolher individualmente
 # ---------------------------------------------------------------------------
 
 MODELOS_IA_PEQUENOS_NEGOCIOS: tuple[str, ...] = (
     (
-        "Oi, espero que esteja tudo bem. Trabalho com automações de IA e consultoria para "
-        "pequenos negócios, com foco em reduzir tarefas manuais e melhorar o "
-        "atendimento. Gostaria de marcar uma conversa de 15 minutos com o "
-        "responsável da {nome}. Você consegue me indicar com quem falar?"
+        "Olá, {nome}! Meu nome é Gabriel e trabalho ajudando pequenos negócios "
+        "a simplificar o atendimento e as rotinas com automações de IA. Queria "
+        "entender se isso faz sentido para vocês e, se sim, agendar uma conversa "
+        "breve com o responsável. Você é a pessoa certa para falar sobre isso?"
     ),
     (
-        "Olá! Meu trabalho é ajudar pequenos negócios a simplificar atendimento "
-        "e rotinas com automações de IA. Queria entender se isso faz sentido "
-        "para a {nome} e, se sim, agendar uma conversa breve com o responsável. "
-        "Você é a pessoa certa?"
+        "Oi, {nome}! Aqui é o Gabriel. Eu ajudo pequenos negócios a simplificar "
+        "o atendimento e as tarefas do dia a dia com automações de IA. Gostaria "
+        "de entender se isso pode ajudar vocês e conversar rapidamente com o "
+        "responsável. Você é a pessoa certa?"
     ),
     (
-        "Bom dia! Trabalho com consultoria e automações de IA para pequenas "
-        "empresas. Queria conversar com quem cuida de atendimento e processos "
-        "na {nome} para identificar se há algo que valha automatizar. Com quem "
-        "posso falar?"
+        "Olá, tudo bem. Meu nome é Gabriel e trabalho com automações de IA e "
+        "consultoria para pequenos negócios. A ideia é simplificar o atendimento "
+        "e reduzir tarefas repetitivas. Queria marcar uma conversa breve com o "
+        "responsável da {nome}. Posso falar com você?"
     ),
     (
-        "Oi! Encontrei a {nome} pesquisando empresas de {categoria}. Trabalho "
-        "com automações de IA para pequenos negócios e gostaria de apresentar "
-        "algumas possibilidades em uma reunião curta. Posso falar com o "
-        "responsável por essa área?"
+        "Bom dia, {nome}! Sou o Gabriel e ajudo pequenos negócios a organizar o "
+        "atendimento e as rotinas usando automações de IA. Queria entender se "
+        "existe algo que possamos simplificar e, se fizer sentido, agendar uma "
+        "conversa curta com o responsável. É com você que devo falar?"
     ),
 )
 
 PRESETS_MENSAGEM: list[dict[str, str]] = [
     {
-        "id": "ia_pequenos_negocios",
-        "titulo": "IA para pequenos negócios (recomendado)",
-        "descricao": "Apresenta o serviço e pede o contato do responsável.",
-        "texto": "\n---\n".join(MODELOS_IA_PEQUENOS_NEGOCIOS),
+        "id": "gabriel_recomendada",
+        "titulo": "Recomendada",
+        "descricao": "Apresentação natural e pedido direto para falar com o responsável.",
+        "texto": MODELOS_IA_PEQUENOS_NEGOCIOS[0],
     },
     {
-        "id": "pet_maps",
-        "titulo": "Pet / loja no Maps",
-        "descricao": "Natural, cita {nome}. Três variações — bom para ~40 lojas.",
-        "texto": (
-            "Oi! Vi a {nome} no Google Maps e achei interessante. "
-            "Trabalho com soluções para o segmento e queria saber se faz sentido uma conversa rápida.\n"
-            "---\n"
-            "Olá! Estava pesquisando {categoria} na região e achei a {nome}. "
-            "Posso te mandar uma ideia objetiva em 2 minutos?\n"
-            "---\n"
-            "Bom dia! Vi a {nome} ({endereco}) no Maps. Se fizer sentido pro negócio de vocês, "
-            "me conta que eu te explico sem enrolação."
-        ),
+        "id": "gabriel_proxima",
+        "titulo": "Mais próxima",
+        "descricao": "Tom leve, mantendo a mesma proposta e o mesmo objetivo.",
+        "texto": MODELOS_IA_PEQUENOS_NEGOCIOS[1],
     },
     {
-        "id": "curto",
-        "titulo": "Curto e direto",
-        "descricao": "Mensagens curtas. Menos formal.",
-        "texto": (
-            "Oi, tudo bem? Vi a {nome} no Maps e achei o trabalho de vocês legal. "
-            "Posso te contar uma ideia rápida?\n"
-            "---\n"
-            "Olá! Sou de [sua empresa]. Vi a {nome} e queria saber se dá pra bater um papo curto sobre [assunto].\n"
-            "---\n"
-            "Fala! Vi a {nome} no Google. Se tiver 2 min, te mostro algo que tem funcionado com lojas de {categoria}."
-        ),
+        "id": "gabriel_consultiva",
+        "titulo": "Mais consultiva",
+        "descricao": "Explica o benefício antes de pedir a conversa.",
+        "texto": MODELOS_IA_PEQUENOS_NEGOCIOS[2],
     },
     {
-        "id": "formal",
-        "titulo": "Mais formal",
-        "descricao": "Tom profissional, bom para B2B.",
-        "texto": (
-            "Olá, tudo bem? Meu nome é [seu nome], da [empresa]. Encontrei a {nome} no Google Maps "
-            "e gostaria de apresentar uma proposta objetiva para o segmento de {categoria}.\n"
-            "---\n"
-            "Bom dia. Vi a {nome} em {endereco} e acredito que nosso trabalho possa agregar. "
-            "Posso enviar um resumo de 3 linhas?\n"
-            "---\n"
-            "Olá! Pesquisa por {busca} me trouxe até a {nome}. Se fizer sentido, "
-            "combinamos um horário breve para conversar."
-        ),
-    },
-    {
-        "id": "teste",
-        "titulo": "Só teste (1 número)",
-        "descricao": "Para validar se o disparo chega. Não use em lista real.",
-        "texto": (
-            "Oi! Mensagem de teste do sistema de prospecção. "
-            "Pode ignorar — é só pra confirmar que o envio funciona."
-        ),
+        "id": "gabriel_profissional",
+        "titulo": "Mais profissional",
+        "descricao": "Objetiva e um pouco mais formal.",
+        "texto": MODELOS_IA_PEQUENOS_NEGOCIOS[3],
     },
 ]
 
@@ -199,12 +165,11 @@ EXPLICACAO_RITMO = {
 
 
 EXPLICACAO_MENSAGEM = {
-    "titulo": "Como escrever o modelo",
+    "titulo": "Como personalizar",
     "paragrafos": [
-        "Você escreve o texto; o sistema só preenche as lacunas com dados da planilha.",
-        "Use várias variações separadas por uma linha com apenas --- . "
-        "Texto idêntico em dezenas de números é sinal de spam.",
-        "Depois de editar, clique em Salvar modelos. Sem salvar, o botão "
+        "Escolha uma mensagem ou marque as mensagens variadas que deseja usar.",
+        "Você pode editar cada texto; o sistema só preenche as lacunas com dados da planilha.",
+        "Depois de editar, clique em Salvar mensagens. Sem salvar, o botão "
         "Iniciar continua bloqueado.",
     ],
     "lacunas": [
@@ -214,7 +179,7 @@ EXPLICACAO_MENSAGEM = {
         ("{busca}", "Termo que você buscou no scraper"),
     ],
     "dicas": [
-        "Troque [seu produto], [sua empresa] e [seu nome] pelos dados reais.",
+        "Mantenha a apresentação verdadeira e ajuste o texto ao seu serviço.",
         "Não use {telefone} nem {link} — soa invasivo e o sistema bloqueia.",
         "Se a planilha não tiver categoria, o sistema coloca um termo neutro "
         "para a frase não ficar com buraco.",

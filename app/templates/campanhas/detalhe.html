@@ -37,76 +37,77 @@
 {# ========== MENSAGENS ========== #}
 <section class="card" id="mensagem-inicial">
   <h2>1. Mensagem inicial</h2>
-  <p class="muted small">O modelo recomendado já vem salvo em campanhas novas.</p>
+  <p class="muted small">Escolha uma mensagem fixa ou selecione quais mensagens o sistema pode alternar.</p>
 
-  {% set recomendado = presets_mensagem[0] %}
-  <div class="recommended-preset">
-    <div>
-      <strong>{{ recomendado.titulo }}</strong>
-      <p class="muted small">{{ recomendado.descricao }}</p>
+  <form method="post" action="/campanhas/{{ campanha.id }}/modelos" id="form-modelos">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <fieldset class="message-mode-picker">
+      <legend>Como você quer enviar?</legend>
+      <label class="message-mode-option">
+        <input type="radio" name="modo_mensagem" value="unica" {% if modelos|length <= 1 %}checked{% endif %}>
+        <span><strong>Uma mensagem</strong><small>Todos recebem o mesmo texto.</small></span>
+      </label>
+      <label class="message-mode-option">
+        <input type="radio" name="modo_mensagem" value="variadas" {% if modelos|length > 1 %}checked{% endif %}>
+        <span><strong>Mensagens variadas</strong><small>Você escolhe duas ou mais e o sistema alterna.</small></span>
+      </label>
+    </fieldset>
+
+    <div class="message-choice-heading">
+      <strong>Escolha entre as mensagens prontas</strong>
+      <span class="muted small">Clique nos cards para escolher.</span>
     </div>
-    <button type="button" class="btn btn-primary btn-sm js-aplicar-msg"
-            data-preset-id="{{ recomendado.id }}">Usar recomendado</button>
-  </div>
+    <div class="message-choice-grid">
+      {% for pack in presets_mensagem %}
+      <button type="button" class="message-choice js-message-choice"
+              data-preset-id="{{ pack.id }}" aria-pressed="false">
+        <span class="message-choice-title">
+          <strong>{{ pack.titulo }}</strong>
+          <span class="message-choice-state">Escolher</span>
+        </span>
+        <span class="muted small">{{ pack.descricao }}</span>
+        <span class="message-choice-preview">{{ pack.texto|truncate(155) }}</span>
+      </button>
+      <script type="text/plain" id="preset-msg-{{ pack.id }}">{{ pack.texto }}</script>
+      {% endfor %}
+    </div>
+
+    <textarea id="campo-modelos" name="modelos_texto" hidden>{{ modelos_texto }}</textarea>
+    <div class="message-editor-heading">
+      <div>
+        <strong id="message-editor-title">Mensagens escolhidas</strong>
+        <span class="muted small">Você pode editar o texto antes de salvar.</span>
+      </div>
+      <span class="message-count" id="message-count"></span>
+    </div>
+    <div class="message-editors" id="message-editors"></div>
+    <p class="message-selection-help small" id="message-selection-help" aria-live="polite"></p>
+    <button class="btn btn-primary" id="save-messages" type="submit">Salvar mensagens</button>
+  </form>
+
+  {% if aviso_modelo %}<div class="flash erro">{{ aviso_modelo }}</div>{% endif %}
+  {% if aviso_diversidade %}<div class="flash aviso">{{ aviso_diversidade }}</div>{% endif %}
 
   <details class="compact-details">
-    <summary>Como editar a mensagem</summary>
+    <summary>Como personalizar e usar {nome}</summary>
     <div class="help-box details-content">
-    <strong>{{ expl_msg.titulo }}</strong>
     {% for p in expl_msg.paragrafos %}
     <p class="muted small">{{ p }}</p>
     {% endfor %}
-    <p class="small" style="margin:10px 0 6px"><strong>Lacunas que você pode usar</strong></p>
+    <p class="small" style="margin:10px 0 6px"><strong>Lacunas disponíveis</strong></p>
     <ul class="help-list">
       {% for codigo, desc in expl_msg.lacunas %}
       <li><span class="mono">{{ codigo }}</span> — {{ desc }}</li>
       {% endfor %}
     </ul>
-    <p class="small" style="margin:10px 0 6px"><strong>Dicas</strong></p>
-    <ul class="help-list">
-      {% for d in expl_msg.dicas %}
-      <li>{{ d }}</li>
-      {% endfor %}
-    </ul>
     </div>
   </details>
-
-  <details class="compact-details">
-  <summary>Ver outros modelos prontos</summary>
-  <p class="small" style="margin:16px 0 8px"><strong>Templates prontos</strong> — clique para copiar pro editor (depois salve):</p>
-  <div class="preset-grid">
-    {% for pack in presets_mensagem %}
-    <div class="preset-card">
-      <strong>{{ pack.titulo }}</strong>
-      <p class="muted small">{{ pack.descricao }}</p>
-      <button type="button" class="btn btn-primary btn-sm js-aplicar-msg"
-              data-preset-id="{{ pack.id }}">Usar este template</button>
-    </div>
-    <script type="text/plain" id="preset-msg-{{ pack.id }}">{{ pack.texto }}</script>
-    {% endfor %}
-  </div>
-  </details>
-
-  {% if aviso_modelo %}<div class="flash erro">{{ aviso_modelo }}</div>{% endif %}
-  {% if aviso_diversidade %}<div class="flash aviso">{{ aviso_diversidade }}</div>{% endif %}
-
-  <form method="post" action="/campanhas/{{ campanha.id }}/modelos" id="form-modelos">
-    <input type="hidden" name="csrf" value="{{ csrf }}">
-    <label>Suas variações
-      <span class="muted small" style="display:block;font-weight:400;margin-top:4px">
-        Separe cada variação com uma linha só com <span class="mono">---</span>.
-        Lembre de clicar em <strong>Salvar modelos</strong> antes de iniciar.
-      </span>
-      <textarea id="campo-modelos" name="modelos_texto" rows="12" placeholder="Escolha um template acima ou escreva o seu...">{{ modelos_texto }}</textarea>
-    </label>
-    <button class="btn btn-primary" type="submit">Salvar modelos</button>
-  </form>
 
   {% if previas %}
   <details class="compact-details preview-details">
   <summary>Ver prévia com leads reais</summary>
   <h2 style="margin-top:20px">Prévia com leads reais</h2>
-  <p class="muted small">É exatamente o texto que sairia no WhatsApp (sorteio de variação incluso).</p>
+  <p class="muted small">É assim que a mensagem aparece com os dados reais de cada lead.</p>
   {% for p in previas %}
   <div class="previa"><strong>{{ p.nome }}</strong> · {{ p.telefone }}
 {{ p.texto }}</div>
@@ -119,8 +120,8 @@
 <section class="card" id="resultados-variacoes">
   <div class="section-heading">
     <div>
-      <h2>Qual mensagem funciona melhor?</h2>
-      <p class="muted small">Cada texto separado por <span class="mono">---</span> vira uma variação. O sistema guarda qual delas cada lead recebeu e compara os resultados.</p>
+      <h2>Desempenho das mensagens</h2>
+      <p class="muted small">No modo variado, o sistema registra qual mensagem cada lead recebeu para você comparar os resultados.</p>
     </div>
   </div>
   {% if resultados_variantes %}
@@ -128,7 +129,7 @@
     <table>
       <thead>
         <tr>
-          <th>Variação</th>
+          <th>Mensagem</th>
           <th>Enviadas</th>
           <th>Respostas</th>
           <th>Taxa</th>
@@ -154,7 +155,7 @@
       </tbody>
     </table>
   </div>
-  <p class="muted small">Compare apenas variações com volume parecido. Taxas muito cedo podem enganar; não escolha uma vencedora com poucas mensagens.</p>
+  <p class="muted small">Compare mensagens com volume parecido. Taxas calculadas sobre poucos envios podem enganar.</p>
   {% else %}
   <div class="empty">Os resultados aparecem aqui depois que os primeiros envios forem feitos.</div>
   {% endif %}
@@ -406,17 +407,125 @@
 
 <script>
 (() => {
-  // --- templates de mensagem ---
-  document.querySelectorAll('.js-aplicar-msg').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const ta = document.getElementById('campo-modelos');
-      const src = document.getElementById('preset-msg-' + btn.dataset.presetId);
-      if (!ta || !src) return;
-      ta.value = src.textContent || '';
-      ta.focus();
-      ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  // --- escolha e edicao das mensagens iniciais ---
+  const messageForm = document.getElementById('form-modelos');
+  const hiddenMessages = document.getElementById('campo-modelos');
+  const editorList = document.getElementById('message-editors');
+  const selectionHelp = document.getElementById('message-selection-help');
+  const messageCount = document.getElementById('message-count');
+  const saveMessages = document.getElementById('save-messages');
+  const messageChoices = [...document.querySelectorAll('.js-message-choice')];
+  const modeInputs = [...document.querySelectorAll('input[name="modo_mensagem"]')];
+
+  if (messageForm && hiddenMessages && editorList) {
+    const presets = new Map(messageChoices.map((button) => {
+      const source = document.getElementById('preset-msg-' + button.dataset.presetId);
+      return [button.dataset.presetId, (source?.textContent || '').trim()];
+    }));
+    let sequence = 0;
+    const initialTexts = hiddenMessages.value.trim()
+      ? hiddenMessages.value.split('\n---\n').map((text) => text.trim()).filter(Boolean)
+      : [];
+    let selectedMessages = initialTexts.map((text) => {
+      const match = [...presets.entries()].find(([, presetText]) => presetText === text);
+      return { key: ++sequence, presetId: match?.[0] || null, text };
     });
-  });
+
+    const currentMode = () => modeInputs.find((input) => input.checked)?.value || 'unica';
+
+    const syncHidden = () => {
+      hiddenMessages.value = selectedMessages
+        .map((message) => message.text.trim())
+        .filter(Boolean)
+        .join('\n---\n');
+    };
+
+    const renderMessages = () => {
+      const mode = currentMode();
+      editorList.replaceChildren();
+
+      selectedMessages.forEach((message, index) => {
+        const card = document.createElement('div');
+        card.className = 'message-editor-card';
+
+        const heading = document.createElement('div');
+        heading.className = 'message-editor-card-heading';
+        const title = document.createElement('strong');
+        title.textContent = mode === 'unica' ? 'Mensagem escolhida' : `Mensagem ${index + 1}`;
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'btn btn-sm message-remove';
+        remove.textContent = 'Remover';
+        remove.addEventListener('click', () => {
+          selectedMessages = selectedMessages.filter((item) => item.key !== message.key);
+          renderMessages();
+        });
+        heading.append(title, remove);
+
+        const textarea = document.createElement('textarea');
+        textarea.rows = 6;
+        textarea.value = message.text;
+        textarea.setAttribute('aria-label', `Editar mensagem ${index + 1}`);
+        textarea.addEventListener('input', () => {
+          message.text = textarea.value;
+          syncHidden();
+        });
+        card.append(heading, textarea);
+        editorList.append(card);
+      });
+
+      const chosenIds = new Set(selectedMessages.map((message) => message.presetId));
+      messageChoices.forEach((button) => {
+        const active = chosenIds.has(button.dataset.presetId);
+        button.classList.toggle('is-selected', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        const state = button.querySelector('.message-choice-state');
+        if (state) {
+          state.textContent = active
+            ? (mode === 'variadas' ? 'Remover' : 'Escolhida')
+            : (mode === 'variadas' ? 'Adicionar' : 'Escolher');
+        }
+      });
+
+      const count = selectedMessages.length;
+      if (messageCount) messageCount.textContent = `${count} ${count === 1 ? 'mensagem' : 'mensagens'}`;
+      const valid = mode === 'unica' ? count === 1 : count >= 2;
+      if (saveMessages) saveMessages.disabled = !valid;
+      if (selectionHelp) {
+        if (mode === 'unica' && count !== 1) {
+          selectionHelp.textContent = 'Escolha um card. Apenas essa mensagem será enviada.';
+        } else if (mode === 'variadas' && count < 2) {
+          selectionHelp.textContent = 'Escolha pelo menos duas mensagens. Só as marcadas serão alternadas.';
+        } else if (mode === 'variadas') {
+          selectionHelp.textContent = `${count} mensagens escolhidas. O sistema alternará somente entre elas.`;
+        } else {
+          selectionHelp.textContent = 'Esta será a única primeira mensagem da campanha.';
+        }
+      }
+      syncHidden();
+    };
+
+    messageChoices.forEach((button) => {
+      button.addEventListener('click', () => {
+        const presetId = button.dataset.presetId;
+        const text = presets.get(presetId) || '';
+        if (!text) return;
+        if (currentMode() === 'unica') {
+          selectedMessages = [{ key: ++sequence, presetId, text }];
+        } else {
+          const existing = selectedMessages.find((message) => message.presetId === presetId);
+          if (existing) {
+            selectedMessages = selectedMessages.filter((message) => message.key !== existing.key);
+          } else {
+            selectedMessages.push({ key: ++sequence, presetId, text });
+          }
+        }
+        renderMessages();
+      });
+    });
+    modeInputs.forEach((input) => input.addEventListener('change', renderMessages));
+    renderMessages();
+  }
 
   // --- presets de ritmo ---
   document.querySelectorAll('.js-aplicar-ritmo').forEach((btn) => {

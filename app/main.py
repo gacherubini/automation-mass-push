@@ -683,7 +683,7 @@ def criar_app(
             usuario_id=usuario.id,
             conexao_id=conexao_fk,
             nome=nome,
-            modelos=list(MODELOS_IA_PEQUENOS_NEGOCIOS),
+            modelos=[MODELOS_IA_PEQUENOS_NEGOCIOS[0]],
             status=StatusCampanha.RASCUNHO,
         )
         sessao.add(campanha)
@@ -780,6 +780,7 @@ def criar_app(
                 campanha=campanha,
                 total_leads=total_leads,
                 por_status=por_status,
+                modelos=modelos,
                 modelos_texto="\n---\n".join(modelos),
                 previas=previas,
                 aviso_modelo=aviso_modelo,
@@ -864,6 +865,7 @@ def criar_app(
         campanha_id: int,
         request: Request,
         modelos_texto: Annotated[str, Form()],
+        modo_mensagem: Annotated[str, Form()] = "variadas",
         csrf: Annotated[str, Form()] = "",
         sessao: Session = Depends(get_sessao),
         usuario: Usuario = Depends(_exigir_usuario),
@@ -877,19 +879,31 @@ def criar_app(
         if campanha is None:
             return RedirectResponse("/app", status_code=303)
 
-        # Variacoes separadas por linha com "---" sozinha, ou por linha em
-        # branco dupla. Uma linha por modelo tambem vale se so houver um.
         modelos = _partir_modelos(modelos_texto)
+        if modo_mensagem not in {"unica", "variadas"}:
+            _flash(request, "erro", "Escolha um modo de mensagem válido.")
+            return RedirectResponse(volta, status_code=303)
+        if modo_mensagem == "unica" and len(modelos) != 1:
+            _flash(request, "erro", "No modo de mensagem única, escolha somente um texto.")
+            return RedirectResponse(volta, status_code=303)
+        if modo_mensagem == "variadas" and len(modelos) < 2:
+            _flash(request, "erro", "Escolha pelo menos duas mensagens para usar o modo variado.")
+            return RedirectResponse(volta, status_code=303)
+        if len(modelos) > len(MODELOS_IA_PEQUENOS_NEGOCIOS):
+            _flash(request, "erro", "Escolha no máximo quatro mensagens.")
+            return RedirectResponse(volta, status_code=303)
         try:
-            if modelos:
-                mod_mensagem.validar(modelos)
+            mod_mensagem.validar(modelos)
         except mod_mensagem.ModeloInvalido as erro:
             _flash(request, "erro", str(erro))
             return RedirectResponse(volta, status_code=303)
 
         campanha.modelos = modelos
         sessao.commit()
-        _flash(request, "ok", f"{len(modelos)} variacao(oes) salva(s).")
+        if modo_mensagem == "unica":
+            _flash(request, "ok", "Mensagem inicial salva.")
+        else:
+            _flash(request, "ok", f"{len(modelos)} mensagens variadas salvas.")
         return RedirectResponse(volta, status_code=303)
 
     @app.post("/campanhas/{campanha_id}/ritmo")
@@ -1509,7 +1523,7 @@ def _partir_modelos(texto: str) -> list[str]:
     if "\n---\n" in bruto:
         partes = bruto.split("\n---\n")
     else:
-        partes = re.split(r"\n\s*\n", bruto)
+        partes = [bruto]
     return [p.strip() for p in partes if p.strip()]
 
 

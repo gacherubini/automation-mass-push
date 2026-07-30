@@ -152,11 +152,12 @@ Abra http://localhost:8000
 2. Vá em **Conexão** → gere o QR → escaneie com o WhatsApp do celular  
    (leia o aviso de risco de ban — o risco é do número que escanear)
 3. **Nova campanha** → suba o `.xlsx` do scraper do Maps
-4. Escreva os **modelos** com lacunas `{nome}` `{categoria}` `{endereco}` `{busca}`  
-   (separe variações com uma linha `---`)
+4. Escolha **Uma mensagem** ou **Mensagens variadas**. No modo variado, marque
+   exatamente os textos que deseja alternar. Você pode editar cada um e usar as
+   lacunas `{nome}` `{categoria}` `{endereco}` `{busca}`
 5. Ajuste o **ritmo** se quiser (o padrão é conservador)
 6. **Iniciar disparo** e acompanhe o progresso na própria tela
-7. Na campanha, compare as variações em **Qual mensagem funciona melhor?**
+7. Na campanha, compare os textos em **Desempenho das mensagens**
 8. Configure **Conversa depois da resposta** primeiro como **Rascunho**
 9. Revise sugestões, transferências e erros em **Conversas**
 

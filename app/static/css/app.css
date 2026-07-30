@@ -240,6 +240,72 @@ th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: u
   border-radius: 10px; padding: 13px 14px; margin: 12px 0;
 }
 .recommended-preset p { margin: 3px 0 0; }
+.message-mode-picker {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+  border: 0; padding: 0; margin: 18px 0;
+}
+.message-mode-picker legend { font-weight: 700; margin-bottom: 8px; }
+.message-mode-option {
+  display: flex; align-items: flex-start; gap: 10px; margin: 0;
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 10px; padding: 13px 14px; cursor: pointer;
+}
+.message-mode-option:has(input:checked) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-input));
+}
+.message-mode-option input { width: auto; margin-top: 3px; accent-color: var(--accent); }
+.message-mode-option span, .message-mode-option small { display: block; }
+.message-mode-option small { color: var(--muted); font-weight: 400; margin-top: 3px; }
+.message-choice-heading, .message-editor-heading, .message-editor-card-heading,
+.message-choice-title {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.message-choice-heading { align-items: flex-end; margin-bottom: 9px; }
+.message-choice-heading > span { text-align: right; }
+.message-choice-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px; margin-bottom: 20px;
+}
+.message-choice {
+  display: flex; flex-direction: column; gap: 7px; min-height: 158px;
+  appearance: none; color: var(--text); font: inherit; text-align: left;
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 10px; padding: 13px 14px; cursor: pointer;
+}
+.message-choice:hover { border-color: var(--accent-dim); }
+.message-choice.is-selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-input));
+}
+.message-choice-state {
+  flex: 0 0 auto; border-radius: 999px; padding: 3px 7px;
+  background: var(--bg-card); color: var(--muted); font-size: .72rem;
+}
+.message-choice.is-selected .message-choice-state {
+  background: var(--accent); color: #042f2a; font-weight: 700;
+}
+.message-choice-preview {
+  color: var(--text); font-size: .8rem; line-height: 1.4; opacity: .9;
+}
+.message-editor-heading {
+  border-top: 1px solid var(--border); padding-top: 16px; margin-bottom: 10px;
+}
+.message-editor-heading > div > span { display: block; margin-top: 3px; }
+.message-count {
+  flex: 0 0 auto; border-radius: 999px; padding: 5px 9px;
+  background: var(--bg-input); color: var(--muted); font-size: .75rem;
+}
+.message-editors { display: grid; gap: 10px; }
+.message-editor-card {
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px;
+}
+.message-editor-card-heading { margin-bottom: 8px; }
+.message-editor-card textarea { min-height: 122px; margin: 0; }
+.message-remove { color: var(--danger); }
+.message-selection-help { min-height: 1.4em; color: var(--muted); margin: 9px 0 12px; }
 .compact-details {
   border: 1px solid var(--border); border-radius: 9px;
   background: var(--bg-input); margin: 10px 0; overflow: hidden;
@@ -304,5 +370,8 @@ th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: u
   .message { width: 94%; }
   .filter-form { align-items: stretch; flex-direction: column; }
   .recommended-preset { align-items: flex-start; flex-direction: column; }
+  .message-mode-picker { grid-template-columns: 1fr; }
+  .message-choice-heading { align-items: flex-start; flex-direction: column; }
+  .message-choice-heading > span { text-align: left; }
   .campaign-steps { position: static; }
 }

@@ -282,8 +282,9 @@ class TestCampanha:
             campanha = s.scalar(select(Campanha))
             assert campanha is not None
             assert campanha.nome == "Pets Canoas"
-            assert len(campanha.modelos) == 4
-            assert all("automações de IA" in modelo for modelo in campanha.modelos)
+            assert len(campanha.modelos) == 1
+            assert "Meu nome é Gabriel" in campanha.modelos[0]
+            assert "automações de IA" in campanha.modelos[0]
             leads = s.scalars(select(Lead).where(Lead.campanha_id == campanha.id)).all()
             # fixo descartado; so o celular entra
             assert len(leads) == 1
@@ -293,15 +294,21 @@ class TestCampanha:
         r = client.get(loc)
         assert r.status_code == 200
         assert "Bicho Mania" in r.text or "1 leads" in r.text or "leads" in r.text
+        assert "Uma mensagem" in r.text
+        assert "Mensagens variadas" in r.text
+        assert "Recomendada" in r.text
         csrf = _csrf(r.text)
 
         r = client.post(
             f"{loc}/modelos",
             data={
                 "csrf": csrf,
+                "modo_mensagem": "variadas",
                 "modelos_texto": (
-                    "Oi! Vi a {nome} no Maps.\n---\n"
-                    "Ola {nome}, de {categoria}!"
+                    "Olá, {nome}! Meu nome é Gabriel e trabalho com automações de IA. "
+                    "Você é a pessoa certa?\n---\n"
+                    "Oi, {nome}! Aqui é o Gabriel e ajudo pequenos negócios com "
+                    "automações de IA. Posso falar com o responsável?"
                 ),
             },
             follow_redirects=False,
@@ -315,6 +322,23 @@ class TestCampanha:
 
         r = client.get(loc)
         assert "Prévia" in r.text or "Previa" in r.text or "Bicho Mania" in r.text
+        csrf = _csrf(r.text)
+        r = client.post(
+            f"{loc}/modelos",
+            data={
+                "csrf": csrf,
+                "modo_mensagem": "unica",
+                "modelos_texto": "Olá, {nome}! Meu nome é Gabriel. Você é a pessoa certa?",
+            },
+            follow_redirects=False,
+        )
+        assert r.status_code == 303
+        with fabrica() as s:
+            campanha = s.scalar(select(Campanha))
+            assert campanha is not None
+            assert campanha.modelos == [
+                "Olá, {nome}! Meu nome é Gabriel. Você é a pessoa certa?"
+            ]
 
     def test_area_logada_exige_login(self, client: TestClient):
         r = client.get("/campanhas/nova", follow_redirects=False)
@@ -408,7 +432,9 @@ class TestCampanha:
         )
         pagina = client.get(f"/campanhas/{campanha_id}")
         assert pagina.status_code == 200
-        assert "Qual mensagem funciona melhor?" in pagina.text
+        assert "Desempenho das mensagens" in pagina.text
+        assert "Uma mensagem" in pagina.text
+        assert "Mensagens variadas" in pagina.text
         assert "2. Respostas com IA" in pagina.text
         csrf = _csrf(pagina.text)
 

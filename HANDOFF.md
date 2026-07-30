@@ -62,10 +62,11 @@ Fluxo do usuário, em 10 passos:
 3. Cria uma campanha e sobe o `.xlsx` gerado pelo scraper do Google Maps
 4. O sistema mostra o relatório: *"40 lojas lidas, 39 com telefone, 31 com
    WhatsApp válido, 8 são fixo"*
-5. Escreve a primeira mensagem, com lacunas: `Oi! Vi a {nome} no Google Maps...`
+5. Escolhe uma mensagem fixa ou marca quais mensagens variadas serão usadas;
+   cada texto pode ser editado e aceita lacunas como `{nome}`
 6. Vê a prévia preenchida com lojas reais
 7. Dispara. As mensagens saem devagar; a tela mostra progresso ao vivo
-8. O painel compara qual variação gera mais respostas e decisores
+8. O painel compara qual mensagem gera mais respostas e decisores
 9. Quem responde entra na inbox; Gemini gera rascunho ou responde com limites
 10. Baixa confiança, interesse ou pedido de pessoa transfere para o humano
 
